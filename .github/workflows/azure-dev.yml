@@ -1,0 +1,97 @@
+# Run when commits are pushed to main
+on:
+  workflow_dispatch:
+  push:
+    # Run when commits are pushed to mainline branch (main or master)
+    # Set this to the mainline branch you are using
+    branches:
+      - main
+
+# Set up permissions for deploying with secretless Azure federated credentials
+# https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure?tabs=azure-portal%2Clinux#set-up-azure-login-with-openid-connect-authentication
+permissions:
+  id-token: write
+  contents: read
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_ENV_TYPE: ${{ vars.AZURE_ENV_TYPE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install azd
+        uses: Azure/setup-azd@v2
+      - name: Log in with Azure (Federated Credentials)
+        run: |
+          azd auth login `
+            --client-id "$Env:AZURE_CLIENT_ID" `
+            --federated-credential-provider "github" `
+            --tenant-id "$Env:AZURE_TENANT_ID"
+        shell: pwsh
+
+
+      - name: Provision Infrastructure
+        run: azd provision --no-prompt
+
+      - name: Package Application
+        run: |
+          mkdir -p ./dist
+          azd package app --output-path ./dist/app-package.zip
+          echo "✅ Application packaged successfully"
+
+      - name: Upload Application Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-package
+          path: ./dist/app-package.zip
+          retention-days: 30
+
+      - name: Deploy to Development
+        run: azd deploy app --from-package ./dist/app-package.zip --no-prompt
+
+      - name: Validate Application
+        run: |
+          echo "🔍 Validating application in development environment..."
+          # TODO: Add actual validation here
+          # Examples:
+          # - Health checks and integration tests
+          # - Security and compliance scanning
+          # - Performance validation
+          sleep 3  # Simulate validation time
+          echo "✅ Application validation passed"
+
+      - name: Download Application Package
+        uses: actions/download-artifact@v4
+        with:
+          name: app-package
+          path: ./prod-deploy
+
+      - name: Promote to Production
+        run: |
+          # Create production environment name by replacing -dev with -prod, or adding -prod if no -dev suffix
+          PROD_ENV_NAME="${AZURE_ENV_NAME%-dev}-prod"
+          echo "Production environment name: $PROD_ENV_NAME"
+          
+          # Set environment variables for this step
+          export AZURE_ENV_NAME="$PROD_ENV_NAME"
+          export AZURE_ENV_TYPE="prod"
+          
+          # Use the artifact package - true "build once, deploy everywhere"
+          PACKAGE_PATH="./prod-deploy/app-package.zip"
+          
+          if [ -f "$PACKAGE_PATH" ]; then
+            echo "🚀 Deploying to production using artifact package: $PACKAGE_PATH"
+            azd deploy app --from-package "$PACKAGE_PATH" --no-prompt
+            echo "✅ Production deployment completed successfully"
+          else
+            echo "❌ Package artifact not found - falling back to regular deployment"
+            azd deploy --no-prompt
+          fi

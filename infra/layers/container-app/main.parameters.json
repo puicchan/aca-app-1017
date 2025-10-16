@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "envType": {
+      "value": "${AZURE_ENV_TYPE}"
+    },
+    "existingAcrEndpoint": {
+      "value": "${AZURE_CONTAINER_REGISTRY_ENDPOINT=}"
+    },
+    "RESOURCE_GROUP_NAME": {
+      "value": "${RESOURCE_GROUP_NAME}"
+    },
+    "APP_IDENTITY_PRINCIPAL_ID": {
+      "value": "${APP_IDENTITY_PRINCIPAL_ID}"
+    },
+    "APP_IDENTITY_RESOURCE_ID": {
+      "value": "${APP_IDENTITY_RESOURCE_ID}"
+    },
+    "APP_IDENTITY_CLIENT_ID": {
+      "value": "${APP_IDENTITY_CLIENT_ID}"
+    },
+    "AZURE_CONTAINER_APPS_ENVIRONMENT_ID": {
+      "value": "${AZURE_CONTAINER_APPS_ENVIRONMENT_ID}"
+    },
+    "AZURE_STORAGE_ACCOUNT_NAME": {
+      "value": "${AZURE_STORAGE_ACCOUNT_NAME}"
+    },
+    "AZURE_KEY_VAULT_URL": {
+      "value": "${AZURE_KEY_VAULT_URL}"
+    },
+    "APPLICATION_INSIGHTS_CONNECTION_STRING": {
+      "value": "${APPLICATION_INSIGHTS_CONNECTION_STRING}"
+    }
+  }
+}

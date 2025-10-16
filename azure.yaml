@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: dev-prod
+infra:
+  layers:
+    - name: foundation
+      path: infra/layers/foundation
+    - name: acr-role
+      path: infra/layers/acr-role
+    - name: container-app
+      path: infra/layers/container-app
+services:
+  app:
+    project: .
+    host: containerapp
+    language: python

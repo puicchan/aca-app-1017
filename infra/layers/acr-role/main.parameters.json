@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "azureEnvType": {
+      "value": "${AZURE_ENV_TYPE}"
+    },
+    "existingAcrEndpoint": {
+      "value": "${AZURE_CONTAINER_REGISTRY_ENDPOINT=}"
+    },
+    "existingAcrResourceGroup": {
+      "value": "${AZURE_CONTAINER_REGISTRY_RESOURCE_GROUP=}"
+    },
+    "APP_IDENTITY_PRINCIPAL_ID": {
+      "value": "${APP_IDENTITY_PRINCIPAL_ID}"
+    }
+  }
+}
