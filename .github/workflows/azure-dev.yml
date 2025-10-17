@@ -99,6 +99,11 @@ jobs:
       - name: Install azd
         uses: Azure/setup-azd@v2
 
+      - name: Enable Alpha Features
+        run: |
+          azd config set alpha.layers on
+          echo "✅ Enabled alpha.layers feature for layered infrastructure"
+
       - name: Log in with Azure (Federated Credentials)
         run: |
           azd auth login \
@@ -123,6 +128,11 @@ jobs:
 
       - name: Install azd
         uses: Azure/setup-azd@v2
+
+      - name: Enable Alpha Features
+        run: |
+          azd config set alpha.layers on
+          echo "✅ Enabled alpha.layers feature for layered infrastructure"
 
       - name: Log in with Azure (Federated Credentials)
         run: |
@@ -211,6 +221,11 @@ jobs:
 
       - name: Install azd
         uses: Azure/setup-azd@v2
+
+      - name: Enable Alpha Features
+        run: |
+          azd config set alpha.layers on
+          echo "✅ Enabled alpha.layers feature for layered infrastructure"
 
       - name: Log in with Azure (Federated Credentials)
         run: |
