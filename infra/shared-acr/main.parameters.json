@@ -2,20 +2,14 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "environmentName": {
-      "value": "${AZURE_ENV_NAME}"
+    "acrEnvironmentName": {
+      "value": "shared"
     },
     "location": {
       "value": "${AZURE_LOCATION}"
     },
-    "envType": {
-      "value": "${AZURE_ENV_TYPE}"
-    },
     "principalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
-    },
-    "existingAcrEndpoint": {
-      "value": "${AZURE_CONTAINER_REGISTRY_ENDPOINT=}"
     }
   }
 }

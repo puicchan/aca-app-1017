@@ -17,9 +17,6 @@
     "RESOURCE_GROUP_NAME": {
       "value": "${RESOURCE_GROUP_NAME}"
     },
-    "APP_IDENTITY_PRINCIPAL_ID": {
-      "value": "${APP_IDENTITY_PRINCIPAL_ID}"
-    },
     "APP_IDENTITY_RESOURCE_ID": {
       "value": "${APP_IDENTITY_RESOURCE_ID}"
     },
@@ -32,11 +29,8 @@
     "AZURE_STORAGE_ACCOUNT_NAME": {
       "value": "${AZURE_STORAGE_ACCOUNT_NAME}"
     },
-    "AZURE_KEY_VAULT_URL": {
-      "value": "${AZURE_KEY_VAULT_URL}"
-    },
-    "APPLICATION_INSIGHTS_CONNECTION_STRING": {
-      "value": "${APPLICATION_INSIGHTS_CONNECTION_STRING}"
+    "ACR_ROLE_ASSIGNED": {
+      "value": "${ACR_ROLE_ASSIGNED}"
     }
   }
 }

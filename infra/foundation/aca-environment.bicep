@@ -23,6 +23,9 @@ param logAnalyticsWorkspaceResourceId string
 @description('VNet integration subnet ID')
 param vnetIntegrationSubnetId string
 
+@description('Existing ACR endpoint (will be provided by shared ACR layer)')
+param existingAcrEndpoint string = ''
+
 // Container Apps Environment
 module containerAppsEnvironment 'br/public:avm/res/app/managed-environment:0.5.2' = {
   name: 'containerAppsEnvironment'
@@ -55,26 +58,6 @@ module containerAppsEnvironment 'br/public:avm/res/app/managed-environment:0.5.2
         workloadProfileType: 'Consumption'
       }
     ]
-  }
-}
-
-@description('Existing ACR endpoint (optional)')
-param existingAcrEndpoint string = ''
-
-// Create ACR only if not using existing one
-module containerRegistry 'br/public:avm/res/container-registry/registry:0.8.0' = if (existingAcrEndpoint == '') {
-  name: 'containerRegistry'
-  params: {
-    name: '${abbrs.containerRegistryRegistries}${resourceToken}'
-    location: location
-    tags: union(tags, {
-      Environment: envType
-      ManagedBy: 'AzureVerifiedModules'
-    })
-    acrSku: envType == 'prod' ? 'Premium' : 'Basic'
-    acrAdminUserEnabled: false
-    publicNetworkAccess: 'Enabled'
-    networkRuleBypassOptions: 'AzureServices'
   }
 }
 

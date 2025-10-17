@@ -1,33 +1,28 @@
-// Container App Deployment Layer
+// Container App Deployment Layer: Deploys the main application to Azure Container Apps
+// Purpose: Creates Container App with ACR integration and managed identity authentication
 targetScope = 'subscription'
 
 @minLength(1)
 @maxLength(64)  
-@description('Name of the environment that can be used as part of naming resource convention')
+@description('Name of the environment for deployment naming')
 param environmentName string
 
 @minLength(1)
 @description('Primary location for all resources')
 param location string
 
-@description('Type of environment (dev, test, prod)')
-param envType string = 'dev'
-
-@description('Existing ACR endpoint (optional)')
+@description('Existing ACR endpoint for container images')
 param existingAcrEndpoint string = ''
 
-// Import outputs from foundation layer
+// Foundation layer outputs
 param RESOURCE_GROUP_NAME string
-param APP_IDENTITY_PRINCIPAL_ID string
 param APP_IDENTITY_RESOURCE_ID string
 param APP_IDENTITY_CLIENT_ID string
 param AZURE_CONTAINER_APPS_ENVIRONMENT_ID string
 param AZURE_STORAGE_ACCOUNT_NAME string
-param AZURE_KEY_VAULT_URL string
-param APPLICATION_INSIGHTS_CONNECTION_STRING string
 
-// Import abbreviations
-var abbrs = loadJsonContent('../../abbreviations.json')
+// Generate unique names and common tags
+var abbrs = loadJsonContent('../abbreviations.json')
 var tags = { 'azd-env-name': environmentName }
 var resourceToken = uniqueString(subscription().id, RESOURCE_GROUP_NAME, location)
 
@@ -45,15 +40,11 @@ module containerApp './aca-containerapp.bicep' = {
     tags: tags
     abbrs: abbrs
     resourceToken: resourceToken
-    envType: envType
     containerAppsEnvironmentId: AZURE_CONTAINER_APPS_ENVIRONMENT_ID
-    appIdentityPrincipalId: APP_IDENTITY_PRINCIPAL_ID
     appIdentityResourceId: APP_IDENTITY_RESOURCE_ID
     appIdentityClientId: APP_IDENTITY_CLIENT_ID
-    storageAccountName: AZURE_STORAGE_ACCOUNT_NAME
-    keyVaultUri: AZURE_KEY_VAULT_URL
-    applicationInsightsConnectionString: APPLICATION_INSIGHTS_CONNECTION_STRING
     existingAcrEndpoint: existingAcrEndpoint
+    storageAccountName: AZURE_STORAGE_ACCOUNT_NAME
   }
 }
 

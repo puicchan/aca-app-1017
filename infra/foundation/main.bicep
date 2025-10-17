@@ -1,4 +1,5 @@
-// Foundation Layer: Core infrastructure without Container App
+// Foundation Layer: Core infrastructure for Azure Container Apps
+// Creates: Resource Group, Container Apps Environment, Managed Identity, Storage, Key Vault, App Insights
 targetScope = 'subscription'
 
 @minLength(1)
@@ -16,21 +17,18 @@ param envType string = 'dev'
 @description('Id of the user or app to assign application roles')
 param principalId string = ''
 
-@description('Existing ACR endpoint (optional)')
-param existingAcrEndpoint string = ''
-
-// Import abbreviations
-var abbrs = loadJsonContent('../../abbreviations.json')
+// Import abbreviations and set common tags
+var abbrs = loadJsonContent('../abbreviations.json')
 var tags = { 'azd-env-name': environmentName }
 
-// Organize resources in a resource group
+// Create resource group for environment resources
 resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   name: '${abbrs.resourcesResourceGroups}${environmentName}'
   location: location
   tags: tags
 }
 
-// Deploy foundation resources (everything except Container App)
+// Deploy core foundation resources
 module foundation './resources-foundation.bicep' = {
   scope: rg
   name: 'foundation'
@@ -39,7 +37,7 @@ module foundation './resources-foundation.bicep' = {
     tags: tags
     envType: envType
     principalId: principalId
-    existingAcrEndpoint: existingAcrEndpoint
+    existingAcrEndpoint: '' // Not used in foundation - kept for compatibility
   }
 }
 

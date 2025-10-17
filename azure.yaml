@@ -1,14 +1,38 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
+# Azure Container Apps Demo: "Build Once, Deploy Everywhere" with Shared ACR
+# This configuration demonstrates a layered infrastructure approach where:
+# - A single Azure Container Registry serves multiple environments (dev/prod)
+# - Each environment has its own Container Apps infrastructure
+# - Managed identities provide secure ACR access without credentials
+
 name: dev-prod
+
+# Layered Infrastructure Deployment Strategy
+# Layers are deployed in sequence, with outputs flowing to subsequent layers
 infra:
   layers:
+    # Layer 1: Foundation - Core infrastructure for each environment
+    # Creates: Resource Group, Container Apps Environment, Managed Identity, Storage, Key Vault
     - name: foundation
-      path: infra/layers/foundation
+      path: infra/foundation
+    
+    # Layer 2: Shared ACR - Single registry for all environments  
+    # Creates: Dedicated Resource Group + Azure Container Registry (Basic SKU)
+    - name: shared-acr
+      path: infra/shared-acr
+    
+    # Layer 3: ACR Role Assignment - Security configuration
+    # Creates: AcrPull role assignment for Container App managed identity
     - name: acr-role
-      path: infra/layers/acr-role
+      path: infra/acr-role
+    
+    # Layer 4: Container App - Application deployment
+    # Creates: Container App with ACR integration and managed identity authentication
     - name: container-app
-      path: infra/layers/container-app
+      path: infra/container-app
+
+# Application Service Configuration
 services:
   app:
     project: .

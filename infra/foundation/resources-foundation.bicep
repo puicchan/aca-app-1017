@@ -41,7 +41,7 @@ param principalId string = ''
 @description('Existing Azure Container Registry endpoint (optional - if provided, will use existing ACR instead of creating new one)')
 param existingAcrEndpoint string = ''
 
-var abbrs = loadJsonContent('../../abbreviations.json')
+var abbrs = loadJsonContent('../abbreviations.json')
 var resourceToken = uniqueString(subscription().id, resourceGroup().id, location)
 
 // Monitor application with Azure Monitor
@@ -134,6 +134,7 @@ resource keyVaultDeploymentRoleAssignment 'Microsoft.Authorization/roleAssignmen
 }
 
 // Azure Container Apps Environment only (no Container App yet)
+// Use shared ACR from previous layer if available, otherwise fall back to existing ACR endpoint
 module acaEnvironment './aca-environment.bicep' = {
   name: 'acaEnvironmentDeployment'
   params: {
@@ -145,15 +146,13 @@ module acaEnvironment './aca-environment.bicep' = {
     applicationInsightsConnectionString: monitoring.outputs.applicationInsightsConnectionString
     logAnalyticsWorkspaceResourceId: monitoring.outputs.logAnalyticsWorkspaceResourceId
     vnetIntegrationSubnetId: network.outputs.vnetIntegrationSubnetId
-    existingAcrEndpoint: existingAcrEndpoint
+    existingAcrEndpoint: existingAcrEndpoint != '' ? existingAcrEndpoint : ''
   }
 }
 
 // Outputs for azd integration and next layers
 output AZURE_CONTAINER_APPS_ENVIRONMENT_NAME string = acaEnvironment.outputs.containerAppsEnvironmentName
 output AZURE_CONTAINER_APPS_ENVIRONMENT_ID string = acaEnvironment.outputs.containerAppsEnvironmentId
-output AZURE_CONTAINER_REGISTRY_ENDPOINT string = existingAcrEndpoint != '' ? existingAcrEndpoint : '${abbrs.containerRegistryRegistries}${resourceToken}.azurecr.io'
-output AZURE_CONTAINER_REGISTRY_NAME string = existingAcrEndpoint != '' ? split(existingAcrEndpoint, '.')[0] : '${abbrs.containerRegistryRegistries}${resourceToken}'
 output AZURE_STORAGE_ACCOUNT_NAME string = shared.outputs.storageAccountName
 output AZURE_STORAGE_CONTAINER_NAME string = 'uploads'
 output AZURE_KEY_VAULT_URL string = keyVault.properties.vaultUri

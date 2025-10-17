@@ -1,6 +1,12 @@
-# Run when commits are pushed to main
+# Azure Container Apps CI/CD Pipeline: Build Once, Deploy Everywhere
+# Supports shared ACR with dynamic tagging and multi-environment deployment
 on:
   workflow_dispatch:
+    inputs:
+      deploy_to_prod:
+        description: 'Deploy to production after dev validation'
+        type: boolean
+        default: true
   push:
     # Run when commits are pushed to mainline branch (main or master)
     # Set this to the mainline branch you are using
@@ -13,49 +19,152 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  # Global environment variables for the pipeline
+  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
 
 jobs:
+  # Build and package the application with dynamic container tagging
   build:
     runs-on: ubuntu-latest
+    outputs:
+      package-tag: ${{ steps.generate-tag.outputs.tag }}
+      dev-env-name: ${{ steps.env-config.outputs.dev-env-name }}
+      prod-env-name: ${{ steps.env-config.outputs.prod-env-name }}
+      registry-endpoint: ${{ steps.env-config.outputs.registry-endpoint }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate Dynamic Tag
+        id: generate-tag
+        run: |
+          # Generate dynamic tag similar to azd deploy pattern
+          TIMESTAMP=$(date +%s)
+          TAG="azd-deploy-${TIMESTAMP}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "🏷️ Generated container tag: ${TAG}"
+
+      - name: Configure Environment Names
+        id: env-config
+        run: |
+          # Configure dev and prod environment names
+          BASE_ENV_NAME="${{ vars.AZURE_ENV_NAME }}"
+          DEV_ENV_NAME="${BASE_ENV_NAME%-prod}-dev"
+          PROD_ENV_NAME="${BASE_ENV_NAME%-dev}-prod"
+          
+          echo "dev-env-name=${DEV_ENV_NAME}" >> $GITHUB_OUTPUT
+          echo "prod-env-name=${PROD_ENV_NAME}" >> $GITHUB_OUTPUT
+          
+          # Get ACR endpoint from GitHub variable or azd environment
+          if [ -n "${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}" ]; then
+            REGISTRY_ENDPOINT="${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}"
+            echo "🔧 Using ACR endpoint from GitHub variable: ${REGISTRY_ENDPOINT}"
+          else
+            # Try to get from azd environment configuration
+            REGISTRY_ENDPOINT=$(azd env get-values --output json | jq -r '.AZURE_CONTAINER_REGISTRY_ENDPOINT // empty' 2>/dev/null || echo "")
+            if [ -n "$REGISTRY_ENDPOINT" ] && [ "$REGISTRY_ENDPOINT" != "null" ]; then
+              echo "🔧 Using ACR endpoint from azd environment: ${REGISTRY_ENDPOINT}"
+            else
+              echo "❌ AZURE_CONTAINER_REGISTRY_ENDPOINT not found in GitHub variables or azd environment"
+              echo "Please set it as a GitHub repository variable or in your azd environment"
+              exit 1
+            fi
+          fi
+          
+          echo "registry-endpoint=${REGISTRY_ENDPOINT}" >> $GITHUB_OUTPUT
+          
+          echo "🌍 Dev Environment: ${DEV_ENV_NAME}"
+          echo "🌍 Prod Environment: ${PROD_ENV_NAME}"
+          echo "🌍 Registry Endpoint: ${REGISTRY_ENDPOINT}"
+
+      - name: Install azd
+        uses: Azure/setup-azd@v2
+
+      - name: Log in with Azure (Federated Credentials)
+        run: |
+          azd auth login \
+            --client-id "$AZURE_CLIENT_ID" \
+            --federated-credential-provider "github" \
+            --tenant-id "$AZURE_TENANT_ID"
+
+  # Deploy to development environment
+  deploy-dev:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: development
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-      AZURE_ENV_TYPE: ${{ vars.AZURE_ENV_TYPE }}
+      AZURE_ENV_NAME: ${{ needs.build.outputs.dev-env-name }}
+      AZURE_ENV_TYPE: dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Install azd
         uses: Azure/setup-azd@v2
+
       - name: Log in with Azure (Federated Credentials)
         run: |
-          azd auth login `
-            --client-id "$Env:AZURE_CLIENT_ID" `
-            --federated-credential-provider "github" `
-            --tenant-id "$Env:AZURE_TENANT_ID"
-        shell: pwsh
+          azd auth login \
+            --client-id "$AZURE_CLIENT_ID" \
+            --federated-credential-provider "github" \
+            --tenant-id "$AZURE_TENANT_ID"
 
-
-      - name: Provision Infrastructure
-        run: azd provision --no-prompt
-
-      - name: Package Application
+      - name: Provision Development Infrastructure
         run: |
+          echo "🏗️ Provisioning development infrastructure..."
+          azd provision --no-prompt
+          echo "✅ Development infrastructure provisioned"
+
+      - name: Build and Package Application
+        run: |
+          echo "📦 Building and packaging application with tag: ${{ needs.build.outputs.package-tag }}"
           mkdir -p ./dist
+          
+          # Build container image with dynamic tag
+          REGISTRY_IMAGE="${{ needs.build.outputs.registry-endpoint }}/dev-prod/app-${{ needs.build.outputs.dev-env-name }}:${{ needs.build.outputs.package-tag }}"
+          echo "🐳 Container image: ${REGISTRY_IMAGE}"
+          
+          # Package application - this will build and push to ACR
           azd package app --output-path ./dist/app-package.zip
           echo "✅ Application packaged successfully"
 
-      - name: Upload Application Package
+      - name: Upload Application Package Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-package
+          name: app-package-${{ needs.build.outputs.package-tag }}
           path: ./dist/app-package.zip
           retention-days: 30
 
       - name: Deploy to Development
-        run: azd deploy app --from-package ./dist/app-package.zip --no-prompt
+        run: |
+          echo "🚀 Deploying to development environment..."
+          # Use the packaged application with container registry integration
+          REGISTRY_IMAGE="${{ needs.build.outputs.registry-endpoint }}/dev-prod/app-${{ needs.build.outputs.dev-env-name }}:${{ needs.build.outputs.package-tag }}"
+          echo "📍 Deploying from registry image: ${REGISTRY_IMAGE}"
+          
+          azd deploy app --from-package "${REGISTRY_IMAGE}" --no-prompt
+          echo "✅ Development deployment completed"
+
+      - name: Get Application URL
+        id: get-url
+        run: |
+          # Get the application URL from azd
+          APP_URL=$(azd show --output json | jq -r '.services.app.ingress.fqdn // empty')
+          if [ -n "$APP_URL" ] && [ "$APP_URL" != "null" ]; then
+            FULL_URL="https://${APP_URL}"
+            echo "app-url=${FULL_URL}" >> $GITHUB_OUTPUT
+            echo "🌐 Application URL: ${FULL_URL}"
+          else
+            echo "⚠️ Could not retrieve application URL"
+          fi
 
       - name: Validate Application
         run: |
@@ -68,30 +177,109 @@ jobs:
           sleep 3  # Simulate validation time
           echo "✅ Application validation passed"
 
-      - name: Download Application Package
-        uses: actions/download-artifact@v4
-        with:
-          name: app-package
-          path: ./prod-deploy
+  # Deploy to production environment
+  deploy-prod:
+    needs: [build, deploy-dev]
+    if: ${{ github.event_name == 'push' || inputs.deploy_to_prod }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_ENV_NAME: ${{ needs.build.outputs.prod-env-name }}
+      AZURE_ENV_TYPE: prod
+      ACR_RESOURCE_GROUP_NAME: ${{ vars.ACR_RESOURCE_GROUP_NAME }}
+      AZURE_CONTAINER_REGISTRY_ENDPOINT: ${{ needs.build.outputs.registry-endpoint }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Promote to Production
+      - name: Install azd
+        uses: Azure/setup-azd@v2
+
+      - name: Log in with Azure (Federated Credentials)
         run: |
-          # Create production environment name by replacing -dev with -prod, or adding -prod if no -dev suffix
-          PROD_ENV_NAME="${AZURE_ENV_NAME%-dev}-prod"
-          echo "Production environment name: $PROD_ENV_NAME"
+          azd auth login \
+            --client-id "$AZURE_CLIENT_ID" \
+            --federated-credential-provider "github" \
+            --tenant-id "$AZURE_TENANT_ID"
+
+      - name: Deploy to Production
+        run: |
+          echo "🚀 Deploying to production environment..."
           
-          # Set environment variables for this step
-          export AZURE_ENV_NAME="$PROD_ENV_NAME"
-          export AZURE_ENV_TYPE="prod"
+          # Use the same container image that was validated in dev
+          REGISTRY_IMAGE="${{ needs.build.outputs.registry-endpoint }}/dev-prod/app-${{ needs.build.outputs.dev-env-name }}:${{ needs.build.outputs.package-tag }}"
+          echo "📍 Deploying from registry image: ${REGISTRY_IMAGE}"
           
-          # Use the artifact package - true "build once, deploy everywhere"
-          PACKAGE_PATH="./prod-deploy/app-package.zip"
-          
-          if [ -f "$PACKAGE_PATH" ]; then
-            echo "🚀 Deploying to production using artifact package: $PACKAGE_PATH"
-            azd deploy app --from-package "$PACKAGE_PATH" --no-prompt
-            echo "✅ Production deployment completed successfully"
+          # Deploy using the exact same container image (build once, deploy everywhere)
+          azd deploy app --from-package "${REGISTRY_IMAGE}" --no-prompt
+          echo "✅ Production deployment completed successfully"
+
+      - name: Get Production Application URL
+        id: get-prod-url
+        run: |
+          # Get the production application URL
+          APP_URL=$(azd show --output json | jq -r '.services.app.ingress.fqdn // empty')
+          if [ -n "$APP_URL" ] && [ "$APP_URL" != "null" ]; then
+            FULL_URL="https://${APP_URL}"
+            echo "prod-app-url=${FULL_URL}" >> $GITHUB_OUTPUT
+            echo "🌐 Production Application URL: ${FULL_URL}"
           else
-            echo "❌ Package artifact not found - falling back to regular deployment"
-            azd deploy --no-prompt
+            echo "⚠️ Could not retrieve production application URL"
           fi
+
+      - name: Validate Production Deployment
+        run: |
+          echo "🔍 Validating production deployment..."
+          
+          PROD_URL="${{ steps.get-prod-url.outputs.prod-app-url }}"
+          if [ -n "$PROD_URL" ]; then
+            echo "🏥 Performing production health check on: ${PROD_URL}"
+            
+            # Production health check with retries
+            for i in {1..5}; do
+              if curl -f -s "${PROD_URL}/health" > /dev/null 2>&1; then
+                echo "✅ Production health check passed"
+                break
+              elif [ $i -eq 5 ]; then
+                echo "❌ Production health check failed - manual investigation required"
+                exit 1
+              else
+                echo "⏳ Retrying production health check (attempt $i)..."
+                sleep 20
+              fi
+            done
+          fi
+          
+          echo "✅ Production deployment validation completed"
+
+  # Summary job to output deployment information
+  deployment-summary:
+    needs: [build, deploy-dev, deploy-prod]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Container Tag:** \`${{ needs.build.outputs.package-tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** \`${{ needs.build.outputs.registry-endpoint }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Environments Deployed:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Development:** ${{ needs.build.outputs.dev-env-name }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.deploy-prod.result }}" == "success" ]]; then
+            echo "- **Production:** ${{ needs.build.outputs.prod-env-name }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Production:** ❌ Deployment failed or skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Container Image:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ needs.build.outputs.registry-endpoint }}/dev-prod/app-${{ needs.build.outputs.dev-env-name }}:${{ needs.build.outputs.package-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
