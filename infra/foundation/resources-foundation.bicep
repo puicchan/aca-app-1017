@@ -38,6 +38,10 @@ param envType string = 'dev'
 @description('Principal ID for Key Vault access policies')
 param principalId string = ''
 
+@description('Principal type for Key Vault access policies')
+@allowed(['User', 'ServicePrincipal'])
+param principalType string = 'User'
+
 @description('Existing Azure Container Registry endpoint (optional - if provided, will use existing ACR instead of creating new one)')
 param existingAcrEndpoint string = ''
 
@@ -129,7 +133,7 @@ resource keyVaultDeploymentRoleAssignment 'Microsoft.Authorization/roleAssignmen
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7') // Key Vault Secrets Officer
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
   }
 }
 

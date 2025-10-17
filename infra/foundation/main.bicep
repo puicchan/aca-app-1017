@@ -17,6 +17,10 @@ param envType string = 'dev'
 @description('Id of the user or app to assign application roles')
 param principalId string = ''
 
+@description('Type of the principal (User or ServicePrincipal)')
+@allowed(['User', 'ServicePrincipal'])
+param principalType string = 'User'
+
 // Import abbreviations and set common tags
 var abbrs = loadJsonContent('../abbreviations.json')
 var tags = { 'azd-env-name': environmentName }
@@ -37,6 +41,7 @@ module foundation './resources-foundation.bicep' = {
     tags: tags
     envType: envType
     principalId: principalId
+    principalType: principalType
     existingAcrEndpoint: '' // Not used in foundation - kept for compatibility
   }
 }
