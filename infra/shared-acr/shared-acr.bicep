@@ -8,6 +8,9 @@ param tags object = {}
 @description('Principal ID for ACR access policies')
 param principalId string = ''
 
+@description('Principal type for ACR access policies (User or ServicePrincipal)')
+param principalType string = 'User'
+
 @description('Environment name for unique resource naming')
 param environmentName string
 
@@ -39,7 +42,7 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d') // AcrPull
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
   }
 }
 
@@ -50,7 +53,7 @@ resource acrPushRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8311e382-0749-4cb8-b61a-304f252e45ec') // AcrPush
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
   }
 }
 

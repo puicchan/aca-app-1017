@@ -16,6 +16,9 @@ param location string
 @description('Id of the user or app to assign application roles')
 param principalId string = ''
 
+@description('Type of the principal (User or ServicePrincipal)')
+param principalType string = 'User'
+
 @description('Existing ACR endpoint - if provided, skip ACR creation')
 param existingAcrEndpoint string = ''
 
@@ -49,6 +52,7 @@ module sharedAcr './shared-acr.bicep' = if (shouldDeployAcr) {
     location: location
     tags: tags
     principalId: principalId
+    principalType: principalType
     environmentName: acrEnvironmentName
   }
 }
