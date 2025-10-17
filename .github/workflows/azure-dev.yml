@@ -110,7 +110,6 @@ jobs:
   deploy-dev:
     needs: build
     runs-on: ubuntu-latest
-    environment: development
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -197,7 +196,6 @@ jobs:
     needs: [build, deploy-dev]
     if: ${{ github.event_name == 'push' || inputs.deploy_to_prod }}
     runs-on: ubuntu-latest
-    environment: production
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
