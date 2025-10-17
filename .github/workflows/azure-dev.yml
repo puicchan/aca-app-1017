@@ -53,8 +53,23 @@ jobs:
         run: |
           # Configure dev and prod environment names
           BASE_ENV_NAME="${{ vars.AZURE_ENV_NAME }}"
-          DEV_ENV_NAME="${BASE_ENV_NAME%-prod}-dev"
-          PROD_ENV_NAME="${BASE_ENV_NAME%-dev}-prod"
+          
+          # Smart environment name generation
+          if [[ "$BASE_ENV_NAME" == *-dev ]]; then
+            # If base name already ends with -dev, use as-is for dev
+            DEV_ENV_NAME="$BASE_ENV_NAME"
+            # Remove -dev and add -prod for production
+            PROD_ENV_NAME="${BASE_ENV_NAME%-dev}-prod"
+          elif [[ "$BASE_ENV_NAME" == *-prod ]]; then
+            # If base name ends with -prod, use as-is for prod
+            PROD_ENV_NAME="$BASE_ENV_NAME"
+            # Remove -prod and add -dev for development
+            DEV_ENV_NAME="${BASE_ENV_NAME%-prod}-dev"
+          else
+            # If base name has no suffix, add appropriate suffixes
+            DEV_ENV_NAME="${BASE_ENV_NAME}-dev"
+            PROD_ENV_NAME="${BASE_ENV_NAME}-prod"
+          fi
           
           echo "dev-env-name=${DEV_ENV_NAME}" >> $GITHUB_OUTPUT
           echo "prod-env-name=${PROD_ENV_NAME}" >> $GITHUB_OUTPUT
