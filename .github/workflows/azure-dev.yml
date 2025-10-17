@@ -115,6 +115,9 @@ jobs:
   deploy-dev:
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      container-image: ${{ steps.package.outputs.container-image }}
+      app-url: ${{ steps.get-url.outputs.app-url }}
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -148,16 +151,29 @@ jobs:
           echo "✅ Development infrastructure provisioned"
 
       - name: Build and Package Application
+        id: package
         run: |
-          echo "📦 Building and packaging application with tag: ${{ needs.build.outputs.package-tag }}"
+          echo "📦 Building and packaging application..."
           mkdir -p ./dist
-          
-          # Build container image with dynamic tag
-          REGISTRY_IMAGE="${{ needs.build.outputs.registry-endpoint }}/dev-prod/app-${{ needs.build.outputs.dev-env-name }}:${{ needs.build.outputs.package-tag }}"
-          echo "🐳 Container image: ${REGISTRY_IMAGE}"
           
           # Package application - this will build and push to ACR
           azd package app --output-path ./dist/app-package.zip
+          
+          # Get the actual container image that was built and pushed
+          ACTUAL_IMAGE=$(azd show --output json | jq -r '.services.app.image // empty')
+          if [ -z "$ACTUAL_IMAGE" ] || [ "$ACTUAL_IMAGE" == "null" ]; then
+            # Fallback: try to get from azd environment
+            ACTUAL_IMAGE=$(azd env get-values --output json | jq -r '.AZURE_CONTAINER_IMAGE // empty')
+          fi
+          
+          if [ -n "$ACTUAL_IMAGE" ] && [ "$ACTUAL_IMAGE" != "null" ]; then
+            echo "🐳 Actual container image built: ${ACTUAL_IMAGE}"
+            echo "container-image=${ACTUAL_IMAGE}" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Could not determine actual container image"
+            exit 1
+          fi
+          
           echo "✅ Application packaged successfully"
 
       - name: Upload Application Package Artifact
@@ -170,11 +186,12 @@ jobs:
       - name: Deploy to Development
         run: |
           echo "🚀 Deploying to development environment..."
-          # Use the packaged application with container registry integration
-          REGISTRY_IMAGE="${{ needs.build.outputs.registry-endpoint }}/dev-prod/app-${{ needs.build.outputs.dev-env-name }}:${{ needs.build.outputs.package-tag }}"
-          echo "📍 Deploying from registry image: ${REGISTRY_IMAGE}"
+          # Use the actual packaged image that was built and pushed
+          CONTAINER_IMAGE="${{ steps.package.outputs.container-image }}"
+          echo "📍 Republishing and deploying from registry image: ${CONTAINER_IMAGE}"
           
-          azd deploy app --from-package "${REGISTRY_IMAGE}" --no-prompt
+          # Use new azd deploy --from-package image-name:tag syntax to republish existing image
+          azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
           echo "✅ Development deployment completed"
 
       - name: Get Application URL
@@ -239,11 +256,11 @@ jobs:
           echo "🚀 Deploying to production environment..."
           
           # Use the same container image that was validated in dev
-          REGISTRY_IMAGE="${{ needs.build.outputs.registry-endpoint }}/dev-prod/app-${{ needs.build.outputs.dev-env-name }}:${{ needs.build.outputs.package-tag }}"
-          echo "📍 Deploying from registry image: ${REGISTRY_IMAGE}"
+          CONTAINER_IMAGE="${{ needs.deploy-dev.outputs.container-image }}"
+          echo "📍 Republishing and deploying from registry image: ${CONTAINER_IMAGE}"
           
-          # Deploy using the exact same container image (build once, deploy everywhere)
-          azd deploy app --from-package "${REGISTRY_IMAGE}" --no-prompt
+          # Use new azd deploy --from-package image-name:tag syntax to republish existing image
+          azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
           echo "✅ Production deployment completed successfully"
 
       - name: Get Production Application URL
