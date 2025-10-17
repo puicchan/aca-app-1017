@@ -157,20 +157,22 @@ jobs:
           mkdir -p ./dist
           
           # Package application - this will build and push to ACR
-          azd package app --output-path ./dist/app-package.zip
+          PACKAGE_OUTPUT=$(azd package app --output-path ./dist/app-package.zip 2>&1)
+          echo "$PACKAGE_OUTPUT"
           
-          # Get the actual container image that was built and pushed
-          ACTUAL_IMAGE=$(azd show --output json | jq -r '.services.app.image // empty')
-          if [ -z "$ACTUAL_IMAGE" ] || [ "$ACTUAL_IMAGE" == "null" ]; then
-            # Fallback: try to get from azd environment
-            ACTUAL_IMAGE=$(azd env get-values --output json | jq -r '.AZURE_CONTAINER_IMAGE // empty')
-          fi
+          # Extract the Target Image from azd package output
+          TARGET_IMAGE=$(echo "$PACKAGE_OUTPUT" | grep -E "Target Image:" | sed 's/.*Target Image: //' | tr -d '[:space:]')
           
-          if [ -n "$ACTUAL_IMAGE" ] && [ "$ACTUAL_IMAGE" != "null" ]; then
-            echo "🐳 Actual container image built: ${ACTUAL_IMAGE}"
-            echo "container-image=${ACTUAL_IMAGE}" >> $GITHUB_OUTPUT
+          if [ -n "$TARGET_IMAGE" ]; then
+            # Construct full container registry path
+            REGISTRY_ENDPOINT="${{ needs.build.outputs.registry-endpoint }}"
+            FULL_IMAGE="${REGISTRY_ENDPOINT}/${TARGET_IMAGE}"
+            echo "🐳 Full container image: ${FULL_IMAGE}"
+            echo "container-image=${FULL_IMAGE}" >> $GITHUB_OUTPUT
           else
-            echo "❌ Could not determine actual container image"
+            echo "❌ Could not extract Target Image from azd package output"
+            echo "Package output was:"
+            echo "$PACKAGE_OUTPUT"
             exit 1
           fi
           
