@@ -153,10 +153,10 @@ jobs:
       - name: Build and Package Application
         id: package
         run: |
-          echo "📦 Building and packaging application..."
+          echo "📦 Building application package..."
           mkdir -p ./dist
           
-          # Package application - this will build and push to ACR
+          # Package application (build only, no push to ACR)
           PACKAGE_OUTPUT=$(azd package app --output-path ./dist/app-package.zip 2>&1)
           echo "$PACKAGE_OUTPUT"
           
@@ -167,7 +167,7 @@ jobs:
             # Construct full container registry path
             REGISTRY_ENDPOINT="${{ needs.build.outputs.registry-endpoint }}"
             FULL_IMAGE="${REGISTRY_ENDPOINT}/${TARGET_IMAGE}"
-            echo "🐳 Full container image: ${FULL_IMAGE}"
+            echo "🐳 Container image to publish: ${FULL_IMAGE}"
             echo "container-image=${FULL_IMAGE}" >> $GITHUB_OUTPUT
           else
             echo "❌ Could not extract Target Image from azd package output"
@@ -177,6 +177,16 @@ jobs:
           fi
           
           echo "✅ Application packaged successfully"
+
+      - name: Publish to Azure Container Registry
+        run: |
+          echo "🚀 Publishing container image to ACR..."
+          CONTAINER_IMAGE="${{ steps.package.outputs.container-image }}"
+          echo "📍 Publishing image: ${CONTAINER_IMAGE}"
+          
+          # Publish container image to ACR
+          azd publish app
+          echo "✅ Container image published to ACR"
 
       - name: Upload Application Package Artifact
         uses: actions/upload-artifact@v4
@@ -188,11 +198,11 @@ jobs:
       - name: Deploy to Development
         run: |
           echo "🚀 Deploying to development environment..."
-          # Use the actual packaged image that was built and pushed
+          # Use the published container image
           CONTAINER_IMAGE="${{ steps.package.outputs.container-image }}"
-          echo "📍 Republishing and deploying from registry image: ${CONTAINER_IMAGE}"
+          echo "📍 Deploying from published registry image: ${CONTAINER_IMAGE}"
           
-          # Use new azd deploy --from-package image-name:tag syntax to republish existing image
+          # Deploy using the published image (no rebuild needed)
           azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
           echo "✅ Development deployment completed"
 
@@ -259,9 +269,9 @@ jobs:
           
           # Use the same container image that was validated in dev
           CONTAINER_IMAGE="${{ needs.deploy-dev.outputs.container-image }}"
-          echo "📍 Republishing and deploying from registry image: ${CONTAINER_IMAGE}"
+          echo "📍 Deploying from published registry image: ${CONTAINER_IMAGE}"
           
-          # Use new azd deploy --from-package image-name:tag syntax to republish existing image
+          # Deploy using the same published image (build once, deploy everywhere)
           azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
           echo "✅ Production deployment completed successfully"
 
