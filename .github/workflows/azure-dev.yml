@@ -42,11 +42,14 @@ jobs:
       - name: Generate Dynamic Tag
         id: generate-tag
         run: |
-          # Generate dynamic tag similar to azd deploy pattern
+          # Generate unique tag following Azure Container Registry best practices
+          # Combines: GitHub run ID (build correlation) + Git commit (source correlation) + timestamp (uniqueness)
+          GIT_SHA=$(git rev-parse --short HEAD)
           TIMESTAMP=$(date +%s)
-          TAG="azd-deploy-${TIMESTAMP}"
+          TAG="azd-deploy-${{ github.run_id }}-${GIT_SHA}-${TIMESTAMP}"
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "🏷️ Generated container tag: ${TAG}"
+          echo "🏷️ Generated unique container tag: ${TAG}"
+          echo "🔗 Build ID: ${{ github.run_id }}, Git SHA: ${GIT_SHA}, Timestamp: ${TIMESTAMP}"
 
       - name: Configure Environment Names
         id: env-config
@@ -116,7 +119,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     outputs:
-      container-image: ${{ steps.package.outputs.container-image }}
+      container-image: ${{ steps.publish.outputs.published-image }}
       app-url: ${{ steps.get-url.outputs.app-url }}
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -153,11 +156,10 @@ jobs:
       - name: Build and Package Application
         id: package
         run: |
-          echo "📦 Building application package..."
-          mkdir -p ./dist
+          echo "📦 Building container image..."
           
-          # Package application (build only, no push to ACR)
-          PACKAGE_OUTPUT=$(azd package app --output-path ./dist/app-package.zip 2>&1)
+          # Package application (builds container image)
+          PACKAGE_OUTPUT=$(azd package app 2>&1)
           echo "$PACKAGE_OUTPUT"
           
           # Extract the Target Image from azd package output
@@ -179,31 +181,41 @@ jobs:
           echo "✅ Application packaged successfully"
 
       - name: Publish to Azure Container Registry
+        id: publish
         run: |
           echo "🚀 Publishing container image to ACR..."
-          CONTAINER_IMAGE="${{ steps.package.outputs.container-image }}"
-          echo "📍 Publishing image: ${CONTAINER_IMAGE}"
           
-          # Publish container image to ACR
-          azd publish app
+          # Publish container image to ACR and capture output
+          PUBLISH_OUTPUT=$(azd publish app 2>&1)
+          echo "$PUBLISH_OUTPUT"
+          
+          # Extract the actual published image from azd publish output
+          # Look for patterns like "Published image: ..." or similar
+          PUBLISHED_IMAGE=$(echo "$PUBLISH_OUTPUT" | grep -E "(Published|Target|Image).*:" | tail -1 | sed 's/.*: //' | tr -d '[:space:]')
+          
+          if [ -z "$PUBLISHED_IMAGE" ]; then
+            # Fallback: get the latest tag from ACR
+            echo "🔍 Getting latest published image from ACR..."
+            REGISTRY_ENDPOINT="${{ needs.build.outputs.registry-endpoint }}"
+            ACR_NAME=$(echo "${REGISTRY_ENDPOINT}" | cut -d'.' -f1)
+            REPO_NAME="dev-prod/app-${{ needs.build.outputs.dev-env-name }}"
+            LATEST_TAG=$(az acr repository show-tags --name "${ACR_NAME}" --repository "${REPO_NAME}" --orderby time_desc --output tsv | head -1)
+            PUBLISHED_IMAGE="${REGISTRY_ENDPOINT}/${REPO_NAME}:${LATEST_TAG}"
+          fi
+          
+          echo "🐳 Actually published image: ${PUBLISHED_IMAGE}"
+          echo "published-image=${PUBLISHED_IMAGE}" >> $GITHUB_OUTPUT
           echo "✅ Container image published to ACR"
-
-      - name: Upload Application Package Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-package-${{ needs.build.outputs.package-tag }}
-          path: ./dist/app-package.zip
-          retention-days: 30
 
       - name: Deploy to Development
         run: |
           echo "🚀 Deploying to development environment..."
-          # Use the published container image
-          CONTAINER_IMAGE="${{ steps.package.outputs.container-image }}"
-          echo "📍 Deploying from published registry image: ${CONTAINER_IMAGE}"
+          # Use the actually published container image
+          PUBLISHED_IMAGE="${{ steps.publish.outputs.published-image }}"
+          echo "📍 Deploying from published registry image: ${PUBLISHED_IMAGE}"
           
           # Deploy using the published image (no rebuild needed)
-          azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
+          azd deploy app --from-package "${PUBLISHED_IMAGE}" --no-prompt
           echo "✅ Development deployment completed"
 
       - name: Get Application URL
