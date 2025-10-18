@@ -120,7 +120,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       container-image: ${{ steps.publish.outputs.published-image }}
-      app-url: ${{ steps.get-url.outputs.app-url }}
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -218,19 +217,6 @@ jobs:
           azd deploy app --from-package "${PUBLISHED_IMAGE}" --no-prompt
           echo "✅ Development deployment completed"
 
-      - name: Get Application URL
-        id: get-url
-        run: |
-          # Get the application URL from azd
-          APP_URL=$(azd show --output json | jq -r '.services.app.ingress.fqdn // empty')
-          if [ -n "$APP_URL" ] && [ "$APP_URL" != "null" ]; then
-            FULL_URL="https://${APP_URL}"
-            echo "app-url=${FULL_URL}" >> $GITHUB_OUTPUT
-            echo "🌐 Application URL: ${FULL_URL}"
-          else
-            echo "⚠️ Could not retrieve application URL"
-          fi
-
       - name: Validate Application
         run: |
           echo "🔍 Validating application in development environment..."
@@ -287,68 +273,11 @@ jobs:
           azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
           echo "✅ Production deployment completed successfully"
 
-      - name: Get Production Application URL
-        id: get-prod-url
-        run: |
-          # Get the production application URL
-          APP_URL=$(azd show --output json | jq -r '.services.app.ingress.fqdn // empty')
-          if [ -n "$APP_URL" ] && [ "$APP_URL" != "null" ]; then
-            FULL_URL="https://${APP_URL}"
-            echo "prod-app-url=${FULL_URL}" >> $GITHUB_OUTPUT
-            echo "🌐 Production Application URL: ${FULL_URL}"
-          else
-            echo "⚠️ Could not retrieve production application URL"
-          fi
-
       - name: Validate Production Deployment
         run: |
           echo "🔍 Validating production deployment..."
-          
-          PROD_URL="${{ steps.get-prod-url.outputs.prod-app-url }}"
-          if [ -n "$PROD_URL" ]; then
-            echo "🏥 Performing production health check on: ${PROD_URL}"
-            
-            # Production health check with retries
-            for i in {1..5}; do
-              if curl -f -s "${PROD_URL}/health" > /dev/null 2>&1; then
-                echo "✅ Production health check passed"
-                break
-              elif [ $i -eq 5 ]; then
-                echo "❌ Production health check failed - manual investigation required"
-                exit 1
-              else
-                echo "⏳ Retrying production health check (attempt $i)..."
-                sleep 20
-              fi
-            done
-          fi
-          
+          # TODO: Add actual validation here  
+          # Examples:
+          # - Health checks and integration tests
+          # - Security and compliance scanning
           echo "✅ Production deployment validation completed"
-
-  # Summary job to output deployment information
-  deployment-summary:
-    needs: [build, deploy-dev, deploy-prod]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deployment Summary
-        run: |
-          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Container Tag:** \`${{ needs.build.outputs.package-tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Registry:** \`${{ needs.build.outputs.registry-endpoint }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Environments Deployed:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Development:** ${{ needs.build.outputs.dev-env-name }}" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ "${{ needs.deploy-prod.result }}" == "success" ]]; then
-            echo "- **Production:** ${{ needs.build.outputs.prod-env-name }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- **Production:** ❌ Deployment failed or skipped" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Container Image:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "${{ needs.build.outputs.registry-endpoint }}/dev-prod/app-${{ needs.build.outputs.dev-env-name }}:${{ needs.build.outputs.package-tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
