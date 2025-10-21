@@ -5,12 +5,6 @@ param location string = resourceGroup().location
 @description('Tags that will be applied to all resources')
 param tags object = {}
 
-@description('Principal ID for ACR access policies')
-param principalId string = ''
-
-@description('Principal type for ACR access policies (User or ServicePrincipal)')
-param principalType string = 'User'
-
 @description('Environment name for unique resource naming')
 param environmentName string
 
@@ -32,28 +26,6 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
     adminUserEnabled: false // Use managed identity authentication
     publicNetworkAccess: 'Enabled'
     networkRuleBypassOptions: 'AzureServices'
-  }
-}
-
-// Grant ACR Pull role to the deployment principal (if provided)
-resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (principalId != '') {
-  scope: containerRegistry
-  name: guid(resourceGroup().id, containerRegistry.name, principalId, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d') // AcrPull
-    principalId: principalId
-    principalType: principalType
-  }
-}
-
-// Grant ACR Push role to the deployment principal (if provided) for CI/CD
-resource acrPushRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (principalId != '') {
-  scope: containerRegistry
-  name: guid(resourceGroup().id, containerRegistry.name, principalId, '8311e382-0749-4cb8-b61a-304f252e45ec')
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8311e382-0749-4cb8-b61a-304f252e45ec') // AcrPush
-    principalId: principalId
-    principalType: principalType
   }
 }
 

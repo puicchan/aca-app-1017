@@ -16,6 +16,9 @@ param ACR_RESOURCE_GROUP_NAME string
 @description('Shared ACR name from shared-acr layer')
 param AZURE_CONTAINER_REGISTRY_NAME string
 
+@description('Environment type (dev/prod) to determine permissions')
+param AZURE_ENV_TYPE string = 'dev'
+
 // Assign AcrPull role to Container App managed identity
 module acrRoleAssignment './acr-role-assignment.bicep' = {
   name: 'acr-role-${take(environmentName, 10)}'
@@ -23,6 +26,7 @@ module acrRoleAssignment './acr-role-assignment.bicep' = {
   params: {
     principalId: APP_IDENTITY_PRINCIPAL_ID
     containerRegistryName: AZURE_CONTAINER_REGISTRY_NAME
+    environmentType: AZURE_ENV_TYPE
   }
 }
 

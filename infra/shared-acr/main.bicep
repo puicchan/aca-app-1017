@@ -13,14 +13,11 @@ param acrEnvironmentName string
 @description('Primary location for all resources')
 param location string
 
-@description('Id of the user or app to assign application roles')
-param principalId string = ''
-
-@description('Type of the principal (User or ServicePrincipal)')
-param principalType string = 'User'
-
 @description('Existing ACR endpoint - if provided, skip ACR creation')
 param existingAcrEndpoint string = ''
+
+@description('Existing ACR resource group name - required when using existing ACR')
+param existingAcrResourceGroupName string = ''
 
 // Generate unique names for shared resources
 var abbrs = loadJsonContent('../abbreviations.json')
@@ -51,8 +48,6 @@ module sharedAcr './shared-acr.bicep' = if (shouldDeployAcr) {
   params: {
     location: location
     tags: tags
-    principalId: principalId
-    principalType: principalType
     environmentName: acrEnvironmentName
   }
 }
@@ -61,4 +56,4 @@ module sharedAcr './shared-acr.bicep' = if (shouldDeployAcr) {
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = shouldDeployAcr ? sharedAcr!.outputs.AZURE_CONTAINER_REGISTRY_ENDPOINT : existingAcrEndpoint
 output AZURE_CONTAINER_REGISTRY_NAME string = shouldDeployAcr ? sharedAcr!.outputs.AZURE_CONTAINER_REGISTRY_NAME : split(existingAcrEndpoint, '.')[0]
 output AZURE_CONTAINER_REGISTRY_RESOURCE_ID string = shouldDeployAcr ? sharedAcr!.outputs.AZURE_CONTAINER_REGISTRY_RESOURCE_ID : ''
-output ACR_RESOURCE_GROUP_NAME string = shouldDeployAcr ? acrResourceGroup!.name : ''
+output ACR_RESOURCE_GROUP_NAME string = shouldDeployAcr ? acrResourceGroup!.name : existingAcrResourceGroupName
