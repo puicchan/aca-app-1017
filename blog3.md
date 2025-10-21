@@ -248,28 +248,18 @@ Build and publish once to the shared ACR:
     id: publish
     run: |
       echo "🚀 Publishing container image to ACR..."
-        
-      # Publish container image to ACR and capture output
-      PUBLISH_OUTPUT=$(azd publish app 2>&1)
-      echo "$PUBLISH_OUTPUT"
-          
-      # Extract the actual published image from azd publish output
-      # Look for patterns like "Published image: ..." or similar
-       PUBLISHED_IMAGE=$(echo "$PUBLISH_OUTPUT" | grep -E "(Published|Target|Image).*:" | tail -1 | sed 's/.*: //' | tr -d '[:space:]')
-          
-       if [ -z "$PUBLISHED_IMAGE" ]; then
-         # Fallback: get the latest tag from ACR
-         echo "🔍 Getting latest published image from ACR..."
-         REGISTRY_ENDPOINT="${{ needs.build.outputs.registry-endpoint }}"
-         ACR_NAME=$(echo "${REGISTRY_ENDPOINT}" | cut -d'.' -f1)
-         REPO_NAME="dev-prod/app-${{ needs.build.outputs.dev-env-name }}"
-         LATEST_TAG=$(az acr repository show-tags --name "${ACR_NAME}" --repository "${REPO_NAME}" --orderby time_desc --output tsv | head -1)
-         PUBLISHED_IMAGE="${REGISTRY_ENDPOINT}/${REPO_NAME}:${LATEST_TAG}"
-       fi
-          
-       echo "🐳 Actually published image: ${PUBLISHED_IMAGE}"
-       echo "published-image=${PUBLISHED_IMAGE}" >> $GITHUB_OUTPUT
-       echo "✅ Container image published to ACR"
+      
+      # Get the container image that was built by azd package
+      CONTAINER_IMAGE="${{ steps.package.outputs.container-image }}"
+      echo "📦 Publishing pre-built image: ${CONTAINER_IMAGE}"
+      
+      # Publish the already-packaged container image to ACR
+      azd publish app --from-package "${CONTAINER_IMAGE}" --no-prompt
+      
+      # The published image is the same as the packaged image
+      echo "🐳 Published image: ${CONTAINER_IMAGE}"
+      echo "published-image=${CONTAINER_IMAGE}" >> $GITHUB_OUTPUT
+      echo "✅ Container image published to ACR"
 ```
 
 ### Deploy Stage (Environment-Specific)
