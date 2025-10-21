@@ -217,49 +217,30 @@ azd pipeline config
 Build and publish once to the shared ACR:
 
 ```yaml
-- name: Build and Package Application
-     id: package
-     run: |
-       echo "📦 Building container image..."
-       
-       # Package application (builds container image)
-       PACKAGE_OUTPUT=$(azd package app 2>&1)
-       echo "$PACKAGE_OUTPUT"
-          
-       # Extract the Target Image from azd package output
-       TARGET_IMAGE=$(echo "$PACKAGE_OUTPUT" | grep -E "Target Image:" | sed 's/.*Target Image: //' | tr -d '[:space:]')
-          
-       if [ -n "$TARGET_IMAGE" ]; then
-         # Construct full container registry path
-         REGISTRY_ENDPOINT="${{ needs.build.outputs.registry-endpoint }}"
-         FULL_IMAGE="${REGISTRY_ENDPOINT}/${TARGET_IMAGE}"
-         echo "🐳 Container image to publish: ${FULL_IMAGE}"
-         echo "container-image=${FULL_IMAGE}" >> $GITHUB_OUTPUT
-       else
-         echo "❌ Could not extract Target Image from azd package output"
-         echo "Package output was:"
-         echo "$PACKAGE_OUTPUT"
-         exit 1
-        fi
-          
-          echo "✅ Application packaged successfully"
-
-- name: Publish to Azure Container Registry
+- name: Build and Publish to Azure Container Registry
     id: publish
     run: |
-      echo "🚀 Publishing container image to ACR..."
+      echo "📦 Building and publishing container image to ACR..."
       
-      # Get the container image that was built by azd package
-      CONTAINER_IMAGE="${{ steps.package.outputs.container-image }}"
-      echo "📦 Publishing pre-built image: ${CONTAINER_IMAGE}"
+      # Build and publish container image in one step
+      PUBLISH_OUTPUT=$(azd publish app --no-prompt 2>&1)
+      echo "$PUBLISH_OUTPUT"
       
-      # Publish the already-packaged container image to ACR
-      azd publish app --from-package "${CONTAINER_IMAGE}" --no-prompt
+      # Extract the published image from azd publish output
+      # Look for "Remote Image:" or "Target Image:" in the output
+      PUBLISHED_IMAGE=$(echo "$PUBLISH_OUTPUT" | grep -E "(Remote Image|Target Image):" | tail -1 | sed 's/.*: //' | tr -d '[:space:]')
       
-      # The published image is the same as the packaged image
-      echo "🐳 Published image: ${CONTAINER_IMAGE}"
-      echo "published-image=${CONTAINER_IMAGE}" >> $GITHUB_OUTPUT
-      echo "✅ Container image published to ACR"
+      if [ -n "$PUBLISHED_IMAGE" ]; then
+        echo "🐳 Published image: ${PUBLISHED_IMAGE}"
+        echo "published-image=${PUBLISHED_IMAGE}" >> $GITHUB_OUTPUT
+      else
+        echo "❌ Could not extract image from azd publish output"
+        echo "Publish output was:"
+        echo "$PUBLISH_OUTPUT"
+        exit 1
+      fi
+      
+      echo "✅ Container image built and published to ACR"
 ```
 
 ### Deploy Stage (Environment-Specific)
