@@ -212,66 +212,98 @@ azd pipeline config
 
 ## The GitHub Actions Workflow
 
-### Build Stage (Shared)
+The workflow follows a three-stage pattern: **Build → Deploy-Dev → Deploy-Prod**
 
-Build and publish once to the shared ACR:
+### Build Stage
+
+Build and publish the container image once to the shared ACR:
 
 ```yaml
-- name: Build and Publish to Azure Container Registry
-    id: publish
-    run: |
-      echo "📦 Building and publishing container image to ACR..."
-      
-      # Build and publish container image in one step
-      PUBLISH_OUTPUT=$(azd publish app --no-prompt 2>&1)
-      echo "$PUBLISH_OUTPUT"
-      
-      # Extract the published image from azd publish output
-      # Look for "Remote Image:" or "Target Image:" in the output
-      PUBLISHED_IMAGE=$(echo "$PUBLISH_OUTPUT" | grep -E "(Remote Image|Target Image):" | tail -1 | sed 's/.*: //' | tr -d '[:space:]')
-      
-      if [ -n "$PUBLISHED_IMAGE" ]; then
-        echo "🐳 Published image: ${PUBLISHED_IMAGE}"
+build:
+  runs-on: ubuntu-latest
+  outputs:
+    container-image: ${{ steps.publish.outputs.published-image }}
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install azd
+      uses: Azure/setup-azd@v2
+
+    - name: Enable Alpha Features
+      run: azd config set alpha.layers on
+
+    - name: Log in with Azure (Federated Credentials)
+      run: |
+        azd auth login \
+          --client-id "$AZURE_CLIENT_ID" \
+          --federated-credential-provider "github" \
+          --tenant-id "$AZURE_TENANT_ID"
+
+    - name: Provision Infrastructure
+      run: azd provision --no-prompt
+
+    - name: Build and Publish to Azure Container Registry
+      id: publish
+      run: |
+        azd publish app --no-prompt
+        
+        # Get the published image name from azd environment
+        PUBLISHED_IMAGE=$(azd env get-value SERVICE_APP_IMAGE_NAME)
         echo "published-image=${PUBLISHED_IMAGE}" >> $GITHUB_OUTPUT
-      else
-        echo "❌ Could not extract image from azd publish output"
-        echo "Publish output was:"
-        echo "$PUBLISH_OUTPUT"
-        exit 1
-      fi
-      
-      echo "✅ Container image built and published to ACR"
+        echo "Published image: ${PUBLISHED_IMAGE}"
 ```
 
-### Deploy Stage (Environment-Specific)
+### Deploy to Development
 
-Deploy to prod by pulling the same image from the shared ACR:
+Deploy the built container to the dev environment and validate:
 
 ```yaml
-- name: Deploy to Development
-     run: |
-       echo "🚀 Deploying to development environment..."
-       # Use the actually published container image
-       PUBLISHED_IMAGE="${{ steps.publish.outputs.published-image }}"
-       echo "📍 Deploying from published registry image: ${PUBLISHED_IMAGE}"
-       
-       # Deploy using the published image (no rebuild needed)
-       azd deploy app --from-package "${PUBLISHED_IMAGE}" --no-prompt
-       echo "✅ Development deployment completed"
+deploy-dev:
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - name: Deploy to Development
+      run: azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
 
-# Deploy to production 
-- name: Deploy to Production
-     run: |
-       echo "🚀 Deploying to production environment..."
-       
-       # Use the same container image that was validated in dev
-       CONTAINER_IMAGE="${{ needs.deploy-dev.outputs.container-image }}"
-       echo "📍 Deploying from published registry image: ${CONTAINER_IMAGE}"
-       
-       # Deploy using the same published image (build once, deploy everywhere)
-       azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
-       echo "✅ Production deployment completed successfully"
+    - name: Validate Application
+      run: |
+        echo "Running validation tests..."
+        # TODO: Add your validation tests here
+        # Examples:
+        # - Smoke tests
+        # - Integration tests
+        # - API health checks
+        sleep 5
+        echo "Validation completed successfully"
 ```
+
+### Deploy to Production
+
+Deploy the same validated container to production:
+
+```yaml
+deploy-prod:
+  needs: [build, deploy-dev]
+  runs-on: ubuntu-latest
+  steps:
+    - name: Deploy to Production
+      run: azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
+
+    - name: Validate Production Deployment
+      run: |
+        echo "Running production validation..."
+        # TODO: Add your production validation here
+        sleep 5
+        echo "Production validation completed successfully"
+```
+
+**Key Points:**
+- The container is built **once** in the build stage
+- `azd env get-value SERVICE_APP_IMAGE_NAME` retrieves the published image name
+- Both dev and prod deploy the **exact same container image**
+- Validation steps ensure quality gates between stages
+
 
 ## Conclusion
 

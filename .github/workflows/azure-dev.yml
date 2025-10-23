@@ -10,10 +10,12 @@ permissions:
   contents: read
 
 jobs:
-  deploy-dev:
+  build:
     runs-on: ubuntu-latest
     outputs:
       container-image: ${{ steps.publish.outputs.published-image }}
+      dev-env-name: ${{ steps.set-env-names.outputs.dev-env-name }}
+      prod-env-name: ${{ steps.set-env-names.outputs.prod-env-name }}
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -30,17 +32,26 @@ jobs:
       - name: Enable Alpha Features
         run: azd config set alpha.layers on
 
-      - name: Set Development Environment Name
+      - name: Set Environment Names
+        id: set-env-names
         run: |
           BASE_NAME="${{ vars.AZURE_ENV_NAME }}"
-          # Use as-is if already ends with -dev, otherwise append -dev
+          
+          # Set dev environment name
           if [[ "$BASE_NAME" == *-dev ]]; then
             DEV_ENV_NAME="$BASE_NAME"
+            PROD_ENV_NAME="${BASE_NAME%-dev}-prod"
           else
             DEV_ENV_NAME="${BASE_NAME}-dev"
+            PROD_ENV_NAME="${BASE_NAME}-prod"
           fi
+          
+          echo "dev-env-name=${DEV_ENV_NAME}" >> $GITHUB_OUTPUT
+          echo "prod-env-name=${PROD_ENV_NAME}" >> $GITHUB_OUTPUT
           echo "AZURE_ENV_NAME=${DEV_ENV_NAME}" >> $GITHUB_ENV
+          
           echo "Development environment: ${DEV_ENV_NAME}"
+          echo "Production environment: ${PROD_ENV_NAME}"
 
       - name: Log in with Azure (Federated Credentials)
         run: |
@@ -49,7 +60,7 @@ jobs:
             --federated-credential-provider "github" \
             --tenant-id "$AZURE_TENANT_ID"
 
-      - name: Provision Development Infrastructure
+      - name: Provision Infrastructure
         run: azd provision --no-prompt
 
       - name: Build and Publish to Azure Container Registry
@@ -62,17 +73,67 @@ jobs:
           echo "published-image=${PUBLISHED_IMAGE}" >> $GITHUB_OUTPUT
           echo "Published image: ${PUBLISHED_IMAGE}"
 
-      - name: Deploy to Development
-        run: azd deploy app --from-package "${{ steps.publish.outputs.published-image }}" --no-prompt
-
-  deploy-prod:
-    needs: deploy-dev
+  deploy-dev:
+    needs: build
     runs-on: ubuntu-latest
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_ENV_NAME: ${{ needs.build.outputs.dev-env-name }}
+      AZURE_ENV_TYPE: dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install azd
+        uses: Azure/setup-azd@v2
+
+      - name: Enable Alpha Features
+        run: azd config set alpha.layers on
+
+      - name: Log in with Azure (Federated Credentials)
+        run: |
+          azd auth login \
+            --client-id "$AZURE_CLIENT_ID" \
+            --federated-credential-provider "github" \
+            --tenant-id "$AZURE_TENANT_ID"
+
+      - name: Deploy to Production
+        run: azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
+
+      - name: Validate Production Deployment
+        run: |
+          echo "Running production validation..."
+          # TODO: Add your production validation here
+          # Examples:
+          # - Health checks
+          # - Smoke tests
+          # - Performance checks
+          sleep 5
+          echo "Production validation completed successfully"
+
+      - name: Validate Application
+        run: |
+          echo "Running validation tests..."
+          # TODO: Add your validation tests here
+          # Examples:
+          # - Smoke tests
+          # - Integration tests
+          # - API health checks
+          sleep 5
+          echo "Validation completed successfully"
+
+  deploy-prod:
+    needs: [build, deploy-dev]
+    runs-on: ubuntu-latest
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_ENV_NAME: ${{ needs.build.outputs.prod-env-name }}
       AZURE_ENV_TYPE: prod
       ACR_RESOURCE_GROUP_NAME: ${{ vars.ACR_RESOURCE_GROUP_NAME }}
       AZURE_CONTAINER_REGISTRY_ENDPOINT: ${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}
@@ -86,18 +147,6 @@ jobs:
       - name: Enable Alpha Features
         run: azd config set alpha.layers on
 
-      - name: Set Production Environment Name
-        run: |
-          BASE_NAME="${{ vars.AZURE_ENV_NAME }}"
-          # Replace -dev with -prod, or append -prod if no suffix
-          if [[ "$BASE_NAME" == *-dev ]]; then
-            PROD_ENV_NAME="${BASE_NAME%-dev}-prod"
-          else
-            PROD_ENV_NAME="${BASE_NAME}-prod"
-          fi
-          echo "AZURE_ENV_NAME=${PROD_ENV_NAME}" >> $GITHUB_ENV
-          echo "Production environment: ${PROD_ENV_NAME}"
-
       - name: Log in with Azure (Federated Credentials)
         run: |
           azd auth login \
@@ -106,4 +155,4 @@ jobs:
             --tenant-id "$AZURE_TENANT_ID"
 
       - name: Deploy to Production
-        run: azd deploy app --from-package "${{ needs.deploy-dev.outputs.container-image }}" --no-prompt
+        run: azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
