@@ -100,19 +100,8 @@ jobs:
             --federated-credential-provider "github" \
             --tenant-id "$AZURE_TENANT_ID"
 
-      - name: Deploy to Production
+      - name: Deploy to Development
         run: azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
-
-      - name: Validate Production Deployment
-        run: |
-          echo "Running production validation..."
-          # TODO: Add your production validation here
-          # Examples:
-          # - Health checks
-          # - Smoke tests
-          # - Performance checks
-          sleep 5
-          echo "Production validation completed successfully"
 
       - name: Validate Application
         run: |
