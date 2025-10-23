@@ -1,122 +1,16 @@
 # Azure Container Apps CI/CD Pipeline: Build Once, Deploy Everywhere
-# Supports shared ACR with dynamic tagging and multi-environment deployment
 on:
   workflow_dispatch:
-    inputs:
-      deploy_to_prod:
-        description: 'Deploy to production after dev validation'
-        type: boolean
-        default: true
   push:
-    # Run when commits are pushed to mainline branch (main or master)
-    # Set this to the mainline branch you are using
     branches:
       - main
 
-# Set up permissions for deploying with secretless Azure federated credentials
-# https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure?tabs=azure-portal%2Clinux#set-up-azure-login-with-openid-connect-authentication
 permissions:
   id-token: write
   contents: read
 
-env:
-  # Global environment variables for the pipeline
-  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-  AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-
 jobs:
-  # Build and package the application with dynamic container tagging
-  build:
-    runs-on: ubuntu-latest
-    outputs:
-      package-tag: ${{ steps.generate-tag.outputs.tag }}
-      dev-env-name: ${{ steps.env-config.outputs.dev-env-name }}
-      prod-env-name: ${{ steps.env-config.outputs.prod-env-name }}
-      registry-endpoint: ${{ steps.env-config.outputs.registry-endpoint }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Generate Dynamic Tag
-        id: generate-tag
-        run: |
-          # Generate unique tag following Azure Container Registry best practices
-          # Combines: GitHub run ID (build correlation) + Git commit (source correlation) + timestamp (uniqueness)
-          GIT_SHA=$(git rev-parse --short HEAD)
-          TIMESTAMP=$(date +%s)
-          TAG="azd-deploy-${{ github.run_id }}-${GIT_SHA}-${TIMESTAMP}"
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "🏷️ Generated unique container tag: ${TAG}"
-          echo "🔗 Build ID: ${{ github.run_id }}, Git SHA: ${GIT_SHA}, Timestamp: ${TIMESTAMP}"
-
-      - name: Configure Environment Names
-        id: env-config
-        run: |
-          # Configure dev and prod environment names
-          BASE_ENV_NAME="${{ vars.AZURE_ENV_NAME }}"
-          
-          # Smart environment name generation
-          if [[ "$BASE_ENV_NAME" == *-dev ]]; then
-            # If base name already ends with -dev, use as-is for dev
-            DEV_ENV_NAME="$BASE_ENV_NAME"
-            # Remove -dev and add -prod for production
-            PROD_ENV_NAME="${BASE_ENV_NAME%-dev}-prod"
-          elif [[ "$BASE_ENV_NAME" == *-prod ]]; then
-            # If base name ends with -prod, use as-is for prod
-            PROD_ENV_NAME="$BASE_ENV_NAME"
-            # Remove -prod and add -dev for development
-            DEV_ENV_NAME="${BASE_ENV_NAME%-prod}-dev"
-          else
-            # If base name has no suffix, add appropriate suffixes
-            DEV_ENV_NAME="${BASE_ENV_NAME}-dev"
-            PROD_ENV_NAME="${BASE_ENV_NAME}-prod"
-          fi
-          
-          echo "dev-env-name=${DEV_ENV_NAME}" >> $GITHUB_OUTPUT
-          echo "prod-env-name=${PROD_ENV_NAME}" >> $GITHUB_OUTPUT
-          
-          # Get ACR endpoint from GitHub variable or azd environment
-          if [ -n "${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}" ]; then
-            REGISTRY_ENDPOINT="${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}"
-            echo "🔧 Using ACR endpoint from GitHub variable: ${REGISTRY_ENDPOINT}"
-          else
-            # Try to get from azd environment configuration
-            REGISTRY_ENDPOINT=$(azd env get-values --output json | jq -r '.AZURE_CONTAINER_REGISTRY_ENDPOINT // empty' 2>/dev/null || echo "")
-            if [ -n "$REGISTRY_ENDPOINT" ] && [ "$REGISTRY_ENDPOINT" != "null" ]; then
-              echo "🔧 Using ACR endpoint from azd environment: ${REGISTRY_ENDPOINT}"
-            else
-              echo "❌ AZURE_CONTAINER_REGISTRY_ENDPOINT not found in GitHub variables or azd environment"
-              echo "Please set it as a GitHub repository variable or in your azd environment"
-              exit 1
-            fi
-          fi
-          
-          echo "registry-endpoint=${REGISTRY_ENDPOINT}" >> $GITHUB_OUTPUT
-          
-          echo "🌍 Dev Environment: ${DEV_ENV_NAME}"
-          echo "🌍 Prod Environment: ${PROD_ENV_NAME}"
-          echo "🌍 Registry Endpoint: ${REGISTRY_ENDPOINT}"
-
-      - name: Install azd
-        uses: Azure/setup-azd@v2
-
-      - name: Enable Alpha Features
-        run: |
-          azd config set alpha.layers on
-          echo "✅ Enabled alpha.layers feature for layered infrastructure"
-
-      - name: Log in with Azure (Federated Credentials)
-        run: |
-          azd auth login \
-            --client-id "$AZURE_CLIENT_ID" \
-            --federated-credential-provider "github" \
-            --tenant-id "$AZURE_TENANT_ID"
-
-  # Deploy to development environment
   deploy-dev:
-    needs: build
     runs-on: ubuntu-latest
     outputs:
       container-image: ${{ steps.publish.outputs.published-image }}
@@ -125,7 +19,6 @@ jobs:
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-      AZURE_ENV_NAME: ${{ needs.build.outputs.dev-env-name }}
       AZURE_ENV_TYPE: dev
     steps:
       - name: Checkout
@@ -135,9 +28,19 @@ jobs:
         uses: Azure/setup-azd@v2
 
       - name: Enable Alpha Features
+        run: azd config set alpha.layers on
+
+      - name: Set Development Environment Name
         run: |
-          azd config set alpha.layers on
-          echo "✅ Enabled alpha.layers feature for layered infrastructure"
+          BASE_NAME="${{ vars.AZURE_ENV_NAME }}"
+          # Use as-is if already ends with -dev, otherwise append -dev
+          if [[ "$BASE_NAME" == *-dev ]]; then
+            DEV_ENV_NAME="$BASE_NAME"
+          else
+            DEV_ENV_NAME="${BASE_NAME}-dev"
+          fi
+          echo "AZURE_ENV_NAME=${DEV_ENV_NAME}" >> $GITHUB_ENV
+          echo "Development environment: ${DEV_ENV_NAME}"
 
       - name: Log in with Azure (Federated Credentials)
         run: |
@@ -147,72 +50,32 @@ jobs:
             --tenant-id "$AZURE_TENANT_ID"
 
       - name: Provision Development Infrastructure
-        run: |
-          echo "🏗️ Provisioning development infrastructure..."
-          azd provision --no-prompt
-          echo "✅ Development infrastructure provisioned"
+        run: azd provision --no-prompt
 
       - name: Build and Publish to Azure Container Registry
         id: publish
         run: |
-          echo "📦 Building and publishing container image to ACR..."
+          azd publish app --no-prompt
           
-          # Build and publish container image in one step
-          PUBLISH_OUTPUT=$(azd publish app --no-prompt 2>&1)
-          echo "$PUBLISH_OUTPUT"
-          
-          # Extract the published image from azd publish output
-          # Look for "Remote Image:" or "Target Image:" in the output
-          PUBLISHED_IMAGE=$(echo "$PUBLISH_OUTPUT" | grep -E "(Remote Image|Target Image):" | tail -1 | sed 's/.*: //' | tr -d '[:space:]')
-          
-          if [ -n "$PUBLISHED_IMAGE" ]; then
-            echo "🐳 Published image: ${PUBLISHED_IMAGE}"
-            echo "published-image=${PUBLISHED_IMAGE}" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Could not extract image from azd publish output"
-            echo "Publish output was:"
-            echo "$PUBLISH_OUTPUT"
-            exit 1
-          fi
-          
-          echo "✅ Container image built and published to ACR"
+          # Get the published image name from azd environment
+          PUBLISHED_IMAGE=$(azd env get-value SERVICE_APP_IMAGE_NAME)
+          echo "published-image=${PUBLISHED_IMAGE}" >> $GITHUB_OUTPUT
+          echo "Published image: ${PUBLISHED_IMAGE}"
 
       - name: Deploy to Development
-        run: |
-          echo "🚀 Deploying to development environment..."
-          # Use the actually published container image
-          PUBLISHED_IMAGE="${{ steps.publish.outputs.published-image }}"
-          echo "📍 Deploying from published registry image: ${PUBLISHED_IMAGE}"
-          
-          # Deploy using the published image (no rebuild needed)
-          azd deploy app --from-package "${PUBLISHED_IMAGE}" --no-prompt
-          echo "✅ Development deployment completed"
+        run: azd deploy app --from-package "${{ steps.publish.outputs.published-image }}" --no-prompt
 
-      - name: Validate Application
-        run: |
-          echo "🔍 Validating application in development environment..."
-          # TODO: Add actual validation here
-          # Examples:
-          # - Health checks and integration tests
-          # - Security and compliance scanning
-          # - Performance validation
-          sleep 3  # Simulate validation time
-          echo "✅ Application validation passed"
-
-  # Deploy to production environment
   deploy-prod:
-    needs: [build, deploy-dev]
-    if: ${{ github.event_name == 'push' || inputs.deploy_to_prod }}
+    needs: deploy-dev
     runs-on: ubuntu-latest
     env:
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-      AZURE_ENV_NAME: ${{ needs.build.outputs.prod-env-name }}
       AZURE_ENV_TYPE: prod
       ACR_RESOURCE_GROUP_NAME: ${{ vars.ACR_RESOURCE_GROUP_NAME }}
-      AZURE_CONTAINER_REGISTRY_ENDPOINT: ${{ needs.build.outputs.registry-endpoint }}
+      AZURE_CONTAINER_REGISTRY_ENDPOINT: ${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -221,9 +84,19 @@ jobs:
         uses: Azure/setup-azd@v2
 
       - name: Enable Alpha Features
+        run: azd config set alpha.layers on
+
+      - name: Set Production Environment Name
         run: |
-          azd config set alpha.layers on
-          echo "✅ Enabled alpha.layers feature for layered infrastructure"
+          BASE_NAME="${{ vars.AZURE_ENV_NAME }}"
+          # Replace -dev with -prod, or append -prod if no suffix
+          if [[ "$BASE_NAME" == *-dev ]]; then
+            PROD_ENV_NAME="${BASE_NAME%-dev}-prod"
+          else
+            PROD_ENV_NAME="${BASE_NAME}-prod"
+          fi
+          echo "AZURE_ENV_NAME=${PROD_ENV_NAME}" >> $GITHUB_ENV
+          echo "Production environment: ${PROD_ENV_NAME}"
 
       - name: Log in with Azure (Federated Credentials)
         run: |
@@ -233,22 +106,4 @@ jobs:
             --tenant-id "$AZURE_TENANT_ID"
 
       - name: Deploy to Production
-        run: |
-          echo "🚀 Deploying to production environment..."
-          
-          # Use the same container image that was validated in dev
-          CONTAINER_IMAGE="${{ needs.deploy-dev.outputs.container-image }}"
-          echo "📍 Deploying from published registry image: ${CONTAINER_IMAGE}"
-          
-          # Deploy using the same published image (build once, deploy everywhere)
-          azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
-          echo "✅ Production deployment completed successfully"
-
-      - name: Validate Production Deployment
-        run: |
-          echo "🔍 Validating production deployment..."
-          # TODO: Add actual validation here  
-          # Examples:
-          # - Health checks and integration tests
-          # - Security and compliance scanning
-          echo "✅ Production deployment validation completed"
+        run: azd deploy app --from-package "${{ needs.deploy-dev.outputs.container-image }}" --no-prompt
