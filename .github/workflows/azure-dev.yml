@@ -83,7 +83,6 @@ jobs:
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_ENV_NAME: ${{ needs.build.outputs.dev-env-name }}
       AZURE_ENV_TYPE: dev
-      TERM: dumb
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -109,6 +108,16 @@ jobs:
           azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
           echo "✅ Development deployment completed"
 
+      - name: Display Deployment Endpoint
+        run: |
+          ENDPOINT=$(azd env get-value SERVICE_APP_URI)
+          echo ""
+          echo "======================================"
+          echo "🌐 Application Endpoint (Clickable):"
+          echo "${ENDPOINT}"
+          echo "======================================"
+          echo ""
+
       - name: Validate Application
         run: |
           echo "Running validation tests..."
@@ -132,7 +141,6 @@ jobs:
       AZURE_ENV_TYPE: prod
       ACR_RESOURCE_GROUP_NAME: ${{ vars.ACR_RESOURCE_GROUP_NAME }}
       AZURE_CONTAINER_REGISTRY_ENDPOINT: ${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}
-      TERM: dumb
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -157,3 +165,13 @@ jobs:
           echo "📦 Deploying from published image: ${CONTAINER_IMAGE}"
           azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
           echo "✅ Production deployment completed"
+
+      - name: Display Deployment Endpoint
+        run: |
+          ENDPOINT=$(azd env get-value SERVICE_APP_URI)
+          echo ""
+          echo "======================================"
+          echo "🌐 Application Endpoint (Clickable):"
+          echo "${ENDPOINT}"
+          echo "======================================"
+          echo ""
