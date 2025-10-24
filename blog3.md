@@ -28,13 +28,13 @@ Azure Developer CLI v1.20.0 introduces two new capabilities:
 - Shared resources (like ACR) deployed independently of environment-specific resources
 - Outputs from one layer flow to subsequent layers
 
-Here's a [Flask application example](https://github.com/placeholder) migrated from Azure App Service to Azure Container Apps.
-
 ## Sample Application Architecture
+
+Let's look at an example. This sample application is a [Flask application](https://github.com/placeholder) migrated from Azure App Service to Azure Container Apps.
 
 ### Application Overview
 
-Our sample application is a Flask-based File Manager:
+This sample application is a Flask-based File Manager:
 
 - **Core Functionality**: File upload, listing, and viewing with Azure Blob Storage backend
 - **Security**: Azure Managed Identity integration (no stored connection strings)
