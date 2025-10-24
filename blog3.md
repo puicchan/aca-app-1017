@@ -187,9 +187,9 @@ azd env set AZURE_CONTAINER_REGISTRY_ENDPOINT shared-acr-endpoint
 azd provision
 ```
 
-> ⚠️ ** Critical Infrastructure Best Practice**  
+> ⚠️ **Critical Infrastructure Best Practice**  
 > - We use `azd provision` locally BEFORE going live to set up the infrastructure. **In CI/CD pipelines, we should NEVER run `azd provision`** - only `azd deploy`. Infrastructure changes in production can have serious ramifications and should go through a separate approval process. Accidental infrastructure modifications can cause outages or security issues. 
-> - Also, when `envType = 'prod'`, the infrastructure automatically includes VNET integration. For demonstration purposes (ease of testing), the current setup (line 42 in `aca-environment.bicep`) uses `internal: false`, which means your app remains publicly accessible while the compute infrastructure is isolated. For fully private environments, you'd set `internal: true` and add a reverse proxy.
+> - When `envType = 'prod'`, the infrastructure automatically includes VNET integration. For demonstration purposes (ease of testing), the current setup (line 42 in `aca-environment.bicep`) uses `internal: false`, which means your app remains publicly accessible while the compute infrastructure is isolated. For fully private environments, you'd set `internal: true` and add a reverse proxy.
 
 ### 4. Set Up CI/CD Pipeline with GitHub Actions
 
