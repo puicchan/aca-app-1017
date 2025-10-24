@@ -101,7 +101,9 @@ jobs:
             --tenant-id "$AZURE_TENANT_ID"
 
       - name: Deploy to Development
-        run: azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
+        run: |
+          azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
+          echo "✅ Development deployment completed"
 
       - name: Validate Application
         run: |
@@ -144,4 +146,6 @@ jobs:
             --tenant-id "$AZURE_TENANT_ID"
 
       - name: Deploy to Production
-        run: azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
+        run: |
+          azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
+          echo "✅ Production deployment completed"

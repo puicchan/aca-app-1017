@@ -187,8 +187,7 @@ azd env set AZURE_CONTAINER_REGISTRY_ENDPOINT shared-acr-endpoint
 azd provision
 ```
 
-> **🚨 Critical Infrastructure Best Practice**  
-> Notice: 
+> ⚠️ ** Critical Infrastructure Best Practice**  
 > - We use `azd provision` locally BEFORE going live to set up the infrastructure. **In CI/CD pipelines, we should NEVER run `azd provision`** - only `azd deploy`. Infrastructure changes in production can have serious ramifications and should go through a separate approval process. Accidental infrastructure modifications can cause outages or security issues. 
 > - Also, when `envType = 'prod'`, the infrastructure automatically includes VNET integration. For demonstration purposes (ease of testing), the current setup (line 42 in `aca-environment.bicep`) uses `internal: false`, which means your app remains publicly accessible while the compute infrastructure is isolated. For fully private environments, you'd set `internal: true` and add a reverse proxy.
 
@@ -214,89 +213,54 @@ azd pipeline config
 
 The workflow follows a three-stage pattern: **Build → Deploy-Dev → Deploy-Prod**
 
-### Build Stage
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        GitHub Actions Workflow                  │
+└─────────────────────────────────────────────────────────────────┘
 
-Build and publish the container image once to the shared ACR:
+┌─────────────────────────────────────────────────────────────────┐
+│ Job 1: BUILD                                                    │
+│ ┌─────────────────────────────────────────────────────────────┐ │
+│ │ 1. Enable alpha features (layered infrastructure)           │ │
+│ │ 2. Set environment names (dev/prod)                         │ │
+│ │ 3. Provision Infrastructure (dev environment)               │ │
+│ │ 4. Build & Publish Container to ACR                         │ │
+│ │    └─ azd publish app                                       │ │
+│ │    └─ Get image: azd env get-value SERVICE_APP_IMAGE_NAME   │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│ Outputs:                                                        │
+│  • container-image: crXXXX.azurecr.io/app:azd-deploy-123456     │
+│  • dev-env-name: myapp-dev                                      │
+│  • prod-env-name: myapp-prod                                    │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Job 2: DEPLOY-DEV                                               │
+│ ┌─────────────────────────────────────────────────────────────┐ │
+│ │ 1. Deploy to Development                                    │ │
+│ │    └─ azd deploy app --from-package <container-image>       │ │
+│ │ 2. Validate Application                                     │ │
+│ │    └─ Run smoke tests, integration tests                    │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Job 3: DEPLOY-PROD                                              │
+│ ┌─────────────────────────────────────────────────────────────┐ │
+│ │ 1. Deploy to Production                                     │ │
+│ │    └─ azd deploy app --from-package <same container-image>  │ │
+│ │ 2. Validate Production Deployment                           │ │
+│ │    └─ Run health checks, performance tests                  │ │
+│ └─────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
 
-```yaml
-build:
-  runs-on: ubuntu-latest
-  outputs:
-    container-image: ${{ steps.publish.outputs.published-image }}
-  steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Install azd
-      uses: Azure/setup-azd@v2
-
-    - name: Enable Alpha Features
-      run: azd config set alpha.layers on
-
-    - name: Log in with Azure (Federated Credentials)
-      run: |
-        azd auth login \
-          --client-id "$AZURE_CLIENT_ID" \
-          --federated-credential-provider "github" \
-          --tenant-id "$AZURE_TENANT_ID"
-
-    - name: Provision Infrastructure
-      run: azd provision --no-prompt
-
-    - name: Build and Publish to Azure Container Registry
-      id: publish
-      run: |
-        azd publish app --no-prompt
-        
-        # Get the published image name from azd environment
-        PUBLISHED_IMAGE=$(azd env get-value SERVICE_APP_IMAGE_NAME)
-        echo "published-image=${PUBLISHED_IMAGE}" >> $GITHUB_OUTPUT
-        echo "Published image: ${PUBLISHED_IMAGE}"
+Key: Same container image (built once) deployed to both environments
 ```
 
-### Deploy to Development
-
-Deploy the built container to the dev environment and validate:
-
-```yaml
-deploy-dev:
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - name: Deploy to Development
-      run: azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
-
-    - name: Validate Application
-      run: |
-        echo "Running validation tests..."
-        # TODO: Add your validation tests here
-        # Examples:
-        # - Smoke tests
-        # - Integration tests
-        # - API health checks
-        sleep 5
-        echo "Validation completed successfully"
-```
-
-### Deploy to Production
-
-Deploy the same validated container to production:
-
-```yaml
-deploy-prod:
-  needs: [build, deploy-dev]
-  runs-on: ubuntu-latest
-  steps:
-    - name: Deploy to Production
-      run: azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
-
-    - name: Validate Production Deployment
-      run: |
-        echo "Running production validation..."
-        # TODO: Add your production validation here
-        sleep 5
-        echo "Production validation completed successfully"
-```
+For full details of the workflow implementation, refer to the complete [azure-dev.yml](<placeholder url>/.github/workflows/azure-dev.yml) file in the repository.
 
 **Key Points:**
 - The container is built **once** in the build stage
@@ -304,6 +268,7 @@ deploy-prod:
 - Both dev and prod deploy the **exact same container image**
 - Validation steps ensure quality gates between stages
 
+> **Note:** This workflow uses GitHub Actions job outputs to pass the container image name between jobs. Job outputs are only available on GitHub-hosted runners. If you're using self-hosted runners, you'll need an alternative approach such as storing the image name in an artifact or using a different method to share data between jobs.
 
 ## Conclusion
 
