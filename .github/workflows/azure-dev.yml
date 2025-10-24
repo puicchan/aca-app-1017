@@ -83,6 +83,7 @@ jobs:
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_ENV_NAME: ${{ needs.build.outputs.dev-env-name }}
       AZURE_ENV_TYPE: dev
+      TERM: dumb
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,6 +132,7 @@ jobs:
       AZURE_ENV_TYPE: prod
       ACR_RESOURCE_GROUP_NAME: ${{ vars.ACR_RESOURCE_GROUP_NAME }}
       AZURE_CONTAINER_REGISTRY_ENDPOINT: ${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}
+      TERM: dumb
     steps:
       - name: Checkout
         uses: actions/checkout@v4
