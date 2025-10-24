@@ -102,7 +102,10 @@ jobs:
 
       - name: Deploy to Development
         run: |
-          azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
+          echo "🚀 Deploying to development environment..."
+          CONTAINER_IMAGE="${{ needs.build.outputs.container-image }}"
+          echo "📦 Deploying from published image: ${CONTAINER_IMAGE}"
+          azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
           echo "✅ Development deployment completed"
 
       - name: Validate Application
@@ -147,5 +150,8 @@ jobs:
 
       - name: Deploy to Production
         run: |
-          azd deploy app --from-package "${{ needs.build.outputs.container-image }}" --no-prompt
+          echo "🚀 Deploying to production environment..."
+          CONTAINER_IMAGE="${{ needs.build.outputs.container-image }}"
+          echo "📦 Deploying from published image: ${CONTAINER_IMAGE}"
+          azd deploy app --from-package "${CONTAINER_IMAGE}" --no-prompt
           echo "✅ Production deployment completed"
