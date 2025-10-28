@@ -1,6 +1,6 @@
 # Azure Developer CLI: Azure Container Apps Dev-to-Prod Deployment with Layered Infrastructure
 
-This post walks through how to implement "build once, deploy everywhere" patterns using Azure Container Apps with the new separated container operations and layered infrastructure features in Azure Developer CLI v1.20.0. You'll learn how to deploy the same containerized application across multiple environments with proper separation of concerns.
+This post walks through how to implement "build once, deploy everywhere" patterns using Azure Container Apps with the new `azd publish` and layered infrastructure features in Azure Developer CLI v1.20.0. You'll learn how to deploy the same containerized application across multiple environments with proper separation of concerns.
 
 This is the third installment in our Azure Developer CLI series, building on our previous explorations with [Azure App Service and GitHub Actions](https://devblogs.microsoft.com/devops/azure-developer-cli-from-dev-to-prod-with-one-click/) and [Azure DevOps Pipelines](https://devblogs.microsoft.com/devops/azure-developer-cli-from-dev-to-prod-with-azure-devops-pipelines/).
 
