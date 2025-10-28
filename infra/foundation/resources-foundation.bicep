@@ -85,7 +85,7 @@ module network './network.bicep' = {
 }
 
 // Shared services including storage account
-module shared './shared.bicep' = {
+module shared './storage.bicep' = {
   name: 'sharedDeployment'
   params: {
     location: location

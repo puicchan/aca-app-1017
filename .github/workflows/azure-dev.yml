@@ -83,9 +83,6 @@ jobs:
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
       AZURE_ENV_NAME: ${{ needs.build.outputs.dev-env-name }}
       AZURE_ENV_TYPE: dev
-      CI: true
-      TERM: xterm
-      NO_COLOR: 1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
