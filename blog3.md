@@ -276,6 +276,8 @@ You can see the complete workflow implementation in the [azure-dev.yml](https://
 - Both dev and prod deploy the **exact same container image**
 - Validation steps act as quality gates between stages
 
+![GitHub Actions Workflow in Action](gif/aca-gh-action.gif)
+
 > **Heads up:** This workflow uses GitHub Actions job outputs to pass the container image name between jobs. That only works on GitHub-hosted runners. If you're using self-hosted runners, you'll need a different approach - maybe store the image name in an artifact or use another method to share data between jobs.
 
 ## Wrapping Up
@@ -295,4 +297,4 @@ We're continuing to explore and validate production deployment scenarios with th
 
 Questions about the implementation or want to share your own approach? Join the discussion [here](https://github.com/azure/azure-dev/discussions/5447).
 
-*For more Azure Developer CLI content, follow the [Azure Developer CLI blog](https://devblogs.microsoft.com/azure-sdk/) and check out the [official documentation](https://aka.ms/azd-docs).*
+*For more Azure Developer CLI content, follow the [Azure Developer CLI blog](https://aka.ms/azd-blog/) and check out the [official documentation](https://aka.ms/azd-docs).*
