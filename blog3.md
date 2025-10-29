@@ -297,4 +297,4 @@ We're continuing to explore and validate production deployment scenarios with th
 
 Questions about the implementation or want to share your own approach? Join the discussion [here](https://github.com/azure/azure-dev/discussions/5447).
 
-*For more Azure Developer CLI content, follow the [Azure Developer CLI blog](https://aka.ms/azd-blog/) and check out the [official documentation](https://aka.ms/azd-docs).*
+*For more Azure Developer CLI content, follow the [Azure Developer CLI blog](https://aka.ms/azd-blog/) and check out the [official documentation](https://aka.ms/azd).*
