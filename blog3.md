@@ -2,27 +2,29 @@
 
 This post walks through how to implement "build once, deploy everywhere" patterns using Azure Container Apps with the new `azd publish` and layered infrastructure features in Azure Developer CLI v1.20.0. You'll learn how to deploy the same containerized application across multiple environments with proper separation of concerns.
 
-This is the third installment in our Azure Developer CLI series, building on our previous explorations with [Azure App Service and GitHub Actions](https://devblogs.microsoft.com/devops/azure-developer-cli-from-dev-to-prod-with-one-click/) and [Azure DevOps Pipelines](https://devblogs.microsoft.com/devops/azure-developer-cli-from-dev-to-prod-with-azure-devops-pipelines/).
+This is the third installment in our Azure Developer CLI series, building on our previous explorations:
+- [Azure App Service and GitHub Actions](https://devblogs.microsoft.com/devops/azure-developer-cli-from-dev-to-prod-with-one-click/)
+- [Azure DevOps Pipelines](https://devblogs.microsoft.com/devops/azure-developer-cli-from-dev-to-prod-with-azure-devops-pipelines/)
 
-## Build Once, Deploy Everywhere
+## Build once, deploy everywhere
 
-### The Challenge We're Solving
+### The challenge we're solving
 
-If you've worked with containers in production, you've probably run into this: `azd deploy` bundles everything together - building your container, pushing to registry, and deploying - all in one go. While this is super convenient for development, it creates some headaches for production scenarios:
+If you've worked with containers in production, you've probably run into this: `azd deploy` bundles everything together—building your container, pushing to a registry, and deploying—all in one go. While this is super convenient for development, it creates some headaches for production scenarios:
 
 - You want to use a **single Azure Container Registry (ACR)** across all your environments
 - You need to **build once and deploy everywhere** without rebuilding containers  
 - You want **security controls** around which specific container versions get deployed to production
 - You need the **flexibility** to deploy the same container with different configurations per environment
 
-### Learning from Our Previous Posts
+### Learning from our previous posts in this series
 
 After writing about dev-to-prod patterns with Azure App Service in our first two blog posts, we realized that Azure Container Apps support in azd had some limitations that prevented teams from implementing the same "build once, deploy everywhere" patterns effectively. The azd team addressed these gaps in the recent releases.
 
 Azure Developer CLI v1.20.0 introduces two capabilities that solve these challenges:
 
 #### 1. **Separated Container Operations**
-- **`azd publish`**: Just builds and pushes containers to your registry
+- **`azd publish`**: Builds and pushes containers to your registry
 - **`azd deploy --from-package`**: Deploys specific container versions to environments (without rebuilding)
 
 #### 2. **Layered Infrastructure (Alpha Feature)**
@@ -32,16 +34,16 @@ Azure Developer CLI v1.20.0 introduces two capabilities that solve these challen
 
 I'll show you how this works using a [Flask application example](https://github.com/puicchan/azd-dev-prod-aca-storage) that I migrated from Azure App Service to Azure Container Apps.
 
-## The Sample Application
+## The sample application
 
-### What We're Building
+### What we're building
 
-The sample application is a simple Flask-based File Manager that demonstrates the key concepts:
+The sample application is a simple Flask-based file manager that demonstrates the key concepts:
 
-- **What it does**: Upload files, list them, and view them - all backed by Azure Blob Storage
+- **What it does**: Upload files, list them, and view them (all backed by Azure Blob Storage)
 - **Security approach**: Uses Azure Managed Identity (no connection strings stored anywhere)
 
-### How the Infrastructure is Organized
+### How the infrastructure is organized
 
 Rather than cramming everything into one big template, I've organized this using a layered approach that keeps shared stuff separate from environment-specific resources:
 
@@ -89,7 +91,7 @@ Rather than cramming everything into one big template, I've organized this using
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Layered Infrastructure Configuration
+### Layered infrastructure configuration
 
 Here's how the sequence is defined in the `azure.yaml` file:
 
@@ -123,7 +125,7 @@ services:
     language: python
 ```
 
-This layered approach solves the classic "chicken-and-egg" problem you run into with container deployments. Here's the thing: both dev and prod need to share the same ACR. Your prod Container App needs permissions to pull from ACR, but you can't assign those permissions until both the Container App identity and the ACR actually exist. By provisioning things in the right sequence, we ensure everything gets the permissions it needs.
+This layered approach solves the classic "chicken-and-egg" problem you run into with container deployments. Both dev and prod need to share the same ACR. Your prod Container App needs permissions to pull from ACR, but you can't assign those permissions until both the Container App identity and the ACR actually exist. By provisioning things in the right sequence, we ensure everything gets the permissions it needs.
 
 Here's how the layers work:
 1. **Foundation layer**: Sets up core resources based on your `AZURE_ENV_TYPE` - this includes the Container Apps Environment and Managed Identity
@@ -140,7 +142,7 @@ For example, if you peek at `infra/acr-role/main.parameters.json`, you'll see ho
       "value": "${AZURE_CONTAINER_REGISTRY_NAME}"` 
   ```
 
-## Try It Out
+## Try it out
 
 > ⚠️ **Production Reality Check**  
 > While I'm showing you how to deploy locally with `azd up`, **please use CI/CD pipelines for production deployments**. The local workflow I'm demonstrating here is great for rapid prototyping and development, but you'll want proper CI/CD controls for anything that matters.
@@ -156,7 +158,7 @@ For example, if you peek at `infra/acr-role/main.parameters.json`, you'll see ho
 azd init -t https://github.com/puicchan/azd-dev-prod-aca-storage
 ```
 
-### 2. Set Up Your Development Environment
+### 2. Set up your development environment
 
 Development environment setup uses the familiar `azd up` workflow you're probably already comfortable with:
 
@@ -172,7 +174,7 @@ azd env set AZURE_ENV_TYPE dev
 azd up
 ```
 
-### 3. Prepare Your Production Infrastructure
+### 3. Prepare your production infrastructure
 
 Now you'll want to set up your production environment infrastructure. This is typically a one-time thing you do before setting up your CI/CD pipelines:
 
@@ -189,11 +191,11 @@ azd env set AZURE_CONTAINER_REGISTRY_ENDPOINT shared-acr-endpoint
 azd provision
 ```
 
-> ⚠️ **Critical Note About Infrastructure**  
+> ⚠️ **Critical note about infrastructure**  
 > - I'm using `azd provision` locally here to set up the infrastructure BEFORE going live. **In your CI/CD pipelines, you should NEVER run `azd provision`** - stick to `azd deploy` only. Infrastructure changes in production should go through proper approval processes because accidental modifications can cause outages.  
 > - When `envType = 'prod'`, the infrastructure automatically includes VNET integration. For demo purposes (easier testing), I've set `internal: false` in `aca-environment.bicep` line 42, so your app stays publicly accessible while the compute is isolated. For truly private environments, you'd flip that to `internal: true` and add a reverse proxy.
 
-### 4. Set Up Your CI/CD Pipeline
+### 4. Set up your CI/CD pipeline
 
 Now for the fun part - let's see the pipeline in action! Make a simple code change and commit it.
 
@@ -213,7 +215,7 @@ Here's what to watch for:
 3. **Dev deployment**: See it automatically deploy to development
 4. **Same container everywhere**: Check both environments - they're running the exact same container image
 
-## How the GitHub Actions Workflow Works
+## How the GitHub Actions workflow works
 
 The workflow follows a clean three-stage pattern: **Build → Deploy-Dev → Deploy-Prod**
 
@@ -276,11 +278,11 @@ You can see the complete workflow implementation in the [azure-dev.yml](https://
 - Both dev and prod deploy the **exact same container image**
 - Validation steps act as quality gates between stages
 
-![GitHub Actions Workflow in Action](gif/aca-gh-action.gif)
+![GitHub Actions workflow in action](gif/aca-gh-action.gif)
 
 > **Heads up:** This workflow uses GitHub Actions job outputs to pass the container image name between jobs. That only works on GitHub-hosted runners. If you're using self-hosted runners, you'll need a different approach - maybe store the image name in an artifact or use another method to share data between jobs.
 
-## Wrapping Up
+## Wrapping up
 
 This post walks through how to implement "build once, deploy everywhere" patterns using Azure Container Apps with the new features in Azure Developer CLI v1.20.0. Building on our previous posts about Azure App Service, this Container Apps approach shows how the same core principles work across different Azure compute services.
 
@@ -291,7 +293,7 @@ The combination of layered infrastructure and separated container operations (`a
 - **Layered infrastructure**: Sequential deployment with proper dependency management
 - **Environment separation**: Keep the dev convenience while adding production-ready controls
 
-I realize there are more sophisticated approaches out there depending on what your organization needs. Advanced networking, complex compliance requirements, different deployment strategies - the specific implementation is going to vary based on your team's situation.
+There is no one way to deploy to production, and even more sophisticated approaches depending on the organization's needs. Advanced networking, complex compliance requirements, different deployment strategies, etc.; the specific implementation is going to vary based on your team's situation. We hope this gives you a starting point and an example to follow.
 
 We're continuing to explore and validate production deployment scenarios with the Azure Developer CLI, making sure azd provides reliable patterns as your applications grow from development to production.
 
