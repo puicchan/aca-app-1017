@@ -280,7 +280,7 @@ You can see the complete workflow implementation in the [azure-dev.yml](https://
 
 ![GitHub Actions workflow in action](gif/aca-gh-action.gif)
 
-> **Heads up:** This workflow uses GitHub Actions job outputs to pass the container image name between jobs. That only works on GitHub-hosted runners. If you're using self-hosted runners, you'll need a different approach - maybe store the image name in an artifact or use another method to share data between jobs.
+> **Note:** This workflow uses GitHub Actions job outputs to pass the container image name between jobs. That only works on GitHub-hosted runners. If you're using self-hosted runners, you'll need a different approach - maybe store the image name in an artifact or use another method to share data between jobs.
 
 ## Wrapping up
 
